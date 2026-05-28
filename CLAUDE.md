@@ -12,6 +12,7 @@
 
 - **`manifest.json`** —— MV3 配置。声明权限（`activeTab` / `scripting` / `storage`）、host 权限（仅 `translate.googleapis.com`）、后台 Service Worker（`type: "module"`）、`<all_urls>` 上的内容脚本注入（`document_idle`）、`commands`（`Alt+T` 切换整页翻译）。
 - **`background.js`** —— Service Worker（ES module）。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。也监听 `chrome.commands.onCommand`，把快捷键转成 `toggle` 消息发给当前 tab。
+- **`cache.js`** —— Service Worker 内的 IndexedDB 翻译缓存层。`handleTranslate` 入口先 `cacheGet` 命中直接返回，未命中走 provider，成功 `cacheSet`。key = `sha1(provider + text + targetLang + sourceLang + wantDict)`，TTL 7 天，容量上限 5000 条，超出按 createdAt 升序淘汰。冷启动懒触发一次 cleanup（`maybeCleanupCache`，标志位防重）。缓存命中对所有 caller（页面/悬停/输入框/划词）透明，无需改 content 侧。**任何 IDB 错误都吞掉**，缓存层永远不能阻断翻译主流程。
 - **`providers/`** —— 翻译服务实现。`providers/index.js` 提供 `translate(name, text, targetLang, config)` 路由，返回 `{text}`。当前两个 provider：`google.js`（免费）和 `microsoft.js`（Azure Translator）。**敏感配置（API Key 等）由 background 从 `chrome.storage.sync` 读取后注入 provider，永远不进 content.js 上下文**。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
 - **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译、输入框三击空格翻译、划词翻译气泡。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
 - **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、选输入框翻译触发方式、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。
@@ -144,7 +145,8 @@ Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体�
 | 文件 | 角色 |
 |------|------|
 | `manifest.json` | MV3 配置（含 `commands` 快捷键、`type: "module"`） |
-| `background.js` | Service Worker（ES module），翻译 fetch 入口 + 快捷键转发 |
+| `background.js` | Service Worker（ES module），翻译 fetch 入口 + 快捷键转发 + 音频代理 |
+| `cache.js` | IndexedDB 翻译缓存（sha1 key、TTL 7 天、容量 5000） |
 | `providers/index.js` | provider 路由表（返回 `{text}`） |
 | `providers/google.js` | Google 免费翻译实现 |
 | `providers/microsoft.js` | Microsoft Translator（Azure） |

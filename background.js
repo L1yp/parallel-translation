@@ -4,6 +4,7 @@
 // 永远不进入页面上下文，避免被网页脚本嗅探。
 
 import { translate, DEFAULT_PROVIDER } from "./providers/index.js";
+import { makeCacheKey, cacheGet, cacheSet, maybeCleanupCache } from "./cache.js";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "translate") {
@@ -41,14 +42,32 @@ async function fetchAudioAsDataUrl(url) {
 
 async function handleTranslate(msg) {
   const provider = msg.provider || DEFAULT_PROVIDER;
+  const text = msg.text || "";
+  const targetLang = msg.targetLang || "";
+  const sourceLang = msg.sourceLang || "auto";
+  const wantDict = !!msg.wantDict;
+
+  // SW 每次冷启动顺手清理一次过期/超容缓存（标志位防重）
+  maybeCleanupCache();
+
+  // 仅对非空文本走缓存；空文本直接交给 provider 自然失败
+  let cacheKey = null;
+  if (text) {
+    cacheKey = await makeCacheKey({ provider, text, targetLang, sourceLang, wantDict });
+    const hit = await cacheGet(cacheKey);
+    if (hit) return { translated: hit.text, dict: hit.dict || null, cached: true };
+  }
+
   const config = await loadProviderConfig(provider);
-  const options = {
-    wantDict: !!msg.wantDict,
-    // "auto" 让 provider 自行检测；其它值会显式传给底层 API
-    sourceLang: msg.sourceLang || "auto",
-  };
-  const result = await translate(provider, msg.text, msg.targetLang, config, options);
-  return { translated: result.text || "", dict: result.dict || null };
+  const options = { wantDict, sourceLang };
+  const result = await translate(provider, text, targetLang, config, options);
+  const translated = result.text || "";
+  const dict = result.dict || null;
+  if (cacheKey && translated) {
+    // 不 await：写缓存失败不能阻塞返回；cache.js 内部已经吞错
+    cacheSet(cacheKey, { text: translated, dict });
+  }
+  return { translated, dict };
 }
 
 async function loadProviderConfig(provider) {
