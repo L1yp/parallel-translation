@@ -34,6 +34,18 @@
 - **划词翻译** —— 选「选中后显示翻译按钮」时，鼠标选中文本松开后会出现一个小按钮，点击展开译文；选「选中即自动翻译」则直接弹出译文气泡。点击空白处或按 `Esc` 关闭。默认关闭。
 - **自动翻译动态加载的内容** —— 默认开启，监听 SPA / 无限滚动新增的段落。Twitter/Reddit 触发限流可关。
 
+### 生词本（划词收藏）
+
+划词翻译气泡上有一个 ☆ 星标按钮，点击（或按 `S` 键）即可把当前词加入本地生词本，再点一次取消收藏。单词词典模式下星标显示在词头一行，普通模式下浮在气泡角上。
+
+- **存哪里**：本地 IndexedDB（`itl-vocab` 库），**不上传任何服务器**；与翻译缓存完全独立，不会被缓存清理影响
+- **上限**：5000 条，超出会按添加时间从最旧开始淘汰；单词长度超过 200 字符会被拒绝（避免误把整段当生词）
+- **去重**：同一个词 + 同一个目标语言只会保留一条；重复点星标只会更新最近一次的来源页面，不会覆盖你写的备注
+- **管理面板**：在设置页 → 左侧「生词本」打开，可搜索 / 按目标语言筛选 / 排序 / 写备注 / 查看音标 + 释义 + 例句详情
+- **导入导出**：
+  - 导出：JSON（完整结构，可再导回来）/ CSV（Excel 友好）/ Anki TSV（两列，可直接导入 Anki 卡片）
+  - 导入：仅 JSON（同词跳过，不会覆盖已有备注）
+
 ### 注册 Microsoft Translator（可选）
 
 1. 去 https://portal.azure.com 注册 Azure 账号（需信用卡验证，免费层不扣费）
@@ -54,9 +66,11 @@
 
 - `manifest.json` —— 扩展配置（Manifest V3）
 - `background.js` —— 后台 Service Worker，唯一的翻译 fetch 入口，转发快捷键，注入敏感配置
+- `cache.js` —— IndexedDB 翻译缓存（7 天 TTL，最多 5000 条）
+- `vocab.js` —— IndexedDB 生词本数据层（收藏 / 备注 / 导入导出，库 `itl-vocab`）
 - `providers/` —— 翻译服务实现（`google.js` / `microsoft.js` / `youdao.js`）+ 路由
-- `options.html` / `options.js` —— 独立设置页（API Key 等敏感配置）
-- `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译 / 输入框三击空格翻译 / 划词翻译气泡
+- `options.html` / `options.js` —— 独立设置页：偏好镜像、API Key 凭证、站点规则、生词本管理、本地缓存管理
+- `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译 / 输入框三击空格翻译 / 划词翻译气泡 / 生词本星标
 - `content.css` —— 译文块样式与样式预设
 - `popup.html` / `popup.js` —— 弹窗界面与交互
 
@@ -64,6 +78,7 @@
 
 - Microsoft / 有道的 API Key 与密钥存在 `chrome.storage.sync`（随 Chrome 账号同步），**不会出现在网页上下文**（只有 background.js 读取）
 - 翻译请求只发往你选的服务商（`translate.googleapis.com` / `api.cognitive.microsofttranslator.com` / `openapi.youdao.com`），扩展不收集、不上传任何额外数据
+- 生词本与翻译缓存都存在本地 IndexedDB，**不会跨设备同步、不会上传**；导入导出必须由你手动触发
 - 如担心 `storage.sync` 跨设备同步 Key，可改用 `storage.local`（需要改一行 `popup.js` / `background.js`）
 
 ## 注意事项
