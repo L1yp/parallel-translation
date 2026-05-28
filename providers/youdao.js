@@ -94,7 +94,7 @@ export async function translate(text, targetLang, config, options) {
 
   const translations = Array.isArray(data.translation) ? data.translation : [];
   const out = { text: translations.join("\n") };
-  console.log("[ITL youdao] from:", from, "basic/web:", data.basic, data.web);
+  console.log("[ITL youdao] from:", from, "keys:", Object.keys(data), "raw:", data);
   const dict = parseYoudaoDict(data);
   console.log("[ITL youdao] parsed dict:", dict);
   if (dict) out.dict = dict;
