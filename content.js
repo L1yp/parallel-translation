@@ -79,20 +79,14 @@
   // —— 词对齐 span 构建 ————————————————————————————————————————
 
   // 把字符串按 alignment 切成 [textNode | span] 序列，挂 data-itl-group。
-  // side: "src" 或 "tgt"，决定取 srcStart/srcEnd 还是 tgtStart/tgtEnd。
+  // 用于"译文"侧 —— 译文 DOM 是我们从零构建的 div，没有内嵌结构问题。
   // 微软返回的索引为 inclusive 端点；统一转为 [start, endExclusive) 处理。
-  function buildAlignedFragment(text, alignment, side, groupPrefix) {
-    const keyStart = side === "src" ? "srcStart" : "tgtStart";
-    const keyEnd = side === "src" ? "srcEnd" : "tgtEnd";
+  function buildAlignedFragmentForTarget(text, alignment, groupPrefix) {
     const len = text.length;
-
-    // 收集切片边界点
     const points = new Set([0, len]);
     alignment.forEach((a) => {
-      const s = Math.max(0, Math.min(len, a[keyStart]));
-      const e = Math.max(0, Math.min(len, a[keyEnd] + 1)); // inclusive -> exclusive
-      points.add(s);
-      points.add(e);
+      points.add(Math.max(0, Math.min(len, a.tgtStart)));
+      points.add(Math.max(0, Math.min(len, a.tgtEnd + 1)));
     });
     const sorted = [...points].sort((a, b) => a - b);
 
@@ -104,20 +98,16 @@
       const slice = text.slice(s, e);
       if (!slice) continue;
 
-      // 找出覆盖 [s, e) 的所有 alignment id
       const groups = [];
       alignment.forEach((a, idx) => {
-        const as = a[keyStart];
-        const ae = a[keyEnd] + 1; // exclusive
-        if (as <= s && ae >= e) groups.push(groupPrefix + idx);
+        if (a.tgtStart <= s && a.tgtEnd + 1 >= e) groups.push(groupPrefix + idx);
       });
 
       if (groups.length) {
         const span = document.createElement("span");
         span.className = "itl-tok";
-        // 用空格分隔多 group，方便 CSS attribute selector ~= 命中
         span.setAttribute("data-itl-group", groups.join(" "));
-        span.setAttribute("data-itl-side", side);
+        span.setAttribute("data-itl-side", "tgt");
         span.textContent = slice;
         frag.appendChild(span);
       } else {
@@ -127,9 +117,76 @@
     return frag;
   }
 
-  // 判断 el 是否纯文本（不含 element 子节点）——只有这种 el 才能安全地拆 span 重建。
-  function isPureTextElement(el) {
-    return el.children.length === 0;
+  // 把原文 el 内的所有 TEXT_NODE 按 alignment 边界 split，并 wrap 成 .itl-tok span。
+  // 不破坏内嵌 element（<a>、<strong> 等）—— 用 TreeWalker 找 textNode、用 splitText 切分、用 insertBefore + appendChild wrap。
+  // baseOffset：alignment.srcStart/srcEnd 对应 el.textContent 中的索引偏移
+  //             （worker 里发给 API 的是 textContent.trim()，所以 alignment 索引基于 trimmed 字符串，
+  //              加上 leading whitespace 长度才是 textContent 全局索引）。
+  function wrapAlignedSourceInElement(el, alignment, groupPrefix, baseOffset) {
+    function collectTextNodes() {
+      const out = [];
+      let cursor = 0;
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+          // 跳过我们自己的译文节点内的 textNode
+          if (n.parentElement && n.parentElement.closest(".itl-translation")) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+      let node;
+      while ((node = walker.nextNode())) {
+        const len = node.nodeValue.length;
+        out.push({ node, start: cursor, end: cursor + len });
+        cursor += len;
+      }
+      return out;
+    }
+
+    const initial = collectTextNodes();
+    if (!initial.length) return;
+    const totalLen = initial[initial.length - 1].end;
+
+    // 收集所有切片边界点（已加上 baseOffset，转 textContent 全局索引）
+    const points = new Set();
+    alignment.forEach((a) => {
+      points.add(Math.max(0, Math.min(totalLen, a.srcStart + baseOffset)));
+      points.add(Math.max(0, Math.min(totalLen, a.srcEnd + 1 + baseOffset)));
+    });
+
+    // 在每个边界点处 split textNode，使得 split 后没有 textNode 跨越任意 alignment 区间端点
+    const sortedPts = [...points].sort((a, b) => a - b);
+    for (const p of sortedPts) {
+      if (p <= 0 || p >= totalLen) continue;
+      const list = collectTextNodes();
+      const target = list.find((n) => n.start < p && p < n.end);
+      if (target) {
+        target.node.splitText(p - target.start);
+      }
+    }
+
+    // 现在每个 textNode 要么完全落在某个 alignment 区间内，要么完全在区间外。
+    // 遍历 textNode，对落入区间的 wrap 成 span。
+    const finalList = collectTextNodes();
+    finalList.forEach(({ node, start, end }) => {
+      const groups = [];
+      alignment.forEach((a, idx) => {
+        const as = a.srcStart + baseOffset;
+        const ae = a.srcEnd + 1 + baseOffset;
+        if (as <= start && ae >= end) groups.push(groupPrefix + idx);
+      });
+      if (!groups.length) return;
+
+      const span = document.createElement("span");
+      span.className = "itl-tok";
+      span.setAttribute("data-itl-group", groups.join(" "));
+      span.setAttribute("data-itl-side", "src");
+      const parent = node.parentNode;
+      if (!parent) return;
+      parent.insertBefore(span, node);
+      span.appendChild(node);
+    });
   }
 
   // —— 译文插入 ——————————————————————————————————————————————
@@ -137,7 +194,7 @@
   // 一组全局递增的 group id 前缀，避免不同段之间互相误命中
   let groupSeq = 0;
 
-  function appendTranslation(el, srcTextNormalized, result) {
+  function appendTranslation(el, leadingOffset, result) {
     const tgtText = result.text || "";
     const alignment = result.alignment;
 
@@ -149,15 +206,12 @@
     const useAlignment = !!(alignment && alignment.length);
     if (useAlignment) {
       const prefix = "g" + (groupSeq++) + "-";
-      node.appendChild(buildAlignedFragment(tgtText, alignment, "tgt", prefix));
+      node.appendChild(buildAlignedFragmentForTarget(tgtText, alignment, prefix));
 
-      // 原文也尝试切 span（仅当 el 是纯文本，不破坏内嵌格式）
-      if (isPureTextElement(el)) {
-        // 保存原始 childNodes 以便 turnOff 还原
-        originalChildren.set(el, Array.from(el.childNodes).map((n) => n.cloneNode(true)));
-        while (el.firstChild) el.removeChild(el.firstChild);
-        el.appendChild(buildAlignedFragment(srcTextNormalized, alignment, "src", prefix));
-      }
+      // 原文用 TreeWalker + splitText 原地 wrap span —— 不破坏内嵌 <a>/<strong> 等结构。
+      // 先快照 childNodes 以便 turnOff 还原原文 DOM。
+      originalChildren.set(el, Array.from(el.childNodes).map((n) => n.cloneNode(true)));
+      wrapAlignedSourceInElement(el, alignment, prefix, leadingOffset);
     } else {
       node.textContent = tgtText;
     }
@@ -170,6 +224,16 @@
   const queue = [];
   let activeWorkers = 0;
 
+  // 取 textContent 而不是 innerText —— 切 span 时 TreeWalker 遍历的是 textContent 字符流，
+  // 用 innerText 会因为 <br>/空白规范化导致 alignment 索引错位。
+  function extractTextForTranslation(el) {
+    const raw = el.textContent || "";
+    const leading = raw.length - raw.replace(/^\s+/, "").length;
+    const trailing = raw.length - raw.replace(/\s+$/, "").length;
+    const text = raw.slice(leading, raw.length - trailing);
+    return { text, leadingOffset: leading };
+  }
+
   async function workerLoop() {
     while (queue.length) {
       const el = queue.shift();
@@ -177,13 +241,13 @@
       if (el.hasAttribute(PROCESSED)) continue;
       // 立刻标记，防止 observer 在 await 期间把同一节点重新入队
       el.setAttribute(PROCESSED, "1");
-      const text = (el.innerText || "").trim();
+      const { text, leadingOffset } = extractTextForTranslation(el);
       if (text.length < 2) continue;
       try {
         const result = await translateRemote(text);
         const out = (result.text || "").trim();
         if (out && out !== text) {
-          appendTranslation(el, text, result);
+          appendTranslation(el, leadingOffset, result);
         }
       } catch (e) {
         // 单段失败不打断队列（Google 免费接口经常限流；Microsoft 配置错也只是这段失败）
@@ -314,12 +378,13 @@
     if (!isLeafBlock(block)) return;
 
     block.setAttribute(PROCESSED, "1");
-    const text = (block.innerText || "").trim();
+    const { text, leadingOffset } = extractTextForTranslation(block);
+    if (text.length < 2) return;
     translateRemote(text)
       .then((result) => {
         const out = (result.text || "").trim();
         if (out && out !== text) {
-          appendTranslation(block, text, result);
+          appendTranslation(block, leadingOffset, result);
         }
       })
       .catch((err) => console.warn("[ITL hover] 翻译失败：", err));
