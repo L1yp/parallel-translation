@@ -113,6 +113,33 @@ function openOptions(e) {
 openOptionsLink.addEventListener("click", openOptions);
 credTipLink.addEventListener("click", openOptions);
 
+// "为当前站点定制规则" 入口：从当前 tab 拿 hostname，跳到 options.html#site-rules?host=...
+// 用 tabs.create 而不是 openOptionsPage，因为后者无法传 hash。
+const customizeRow = $("customize-site-row");
+const customizeLink = $("customize-site");
+const customizeHostSpan = $("customize-site-host");
+
+async function loadCurrentHost() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.url) return;
+    const u = new URL(tab.url);
+    // 仅对 http(s) 显示，扩展页 / chrome:// / file:// 等没意义
+    if (u.protocol !== "http:" && u.protocol !== "https:") return;
+    if (!u.hostname) return;
+    customizeHostSpan.textContent = "（" + u.hostname + "）";
+    customizeRow.style.display = "block";
+    customizeLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      const url = chrome.runtime.getURL("options.html") + "#site-rules?host=" + encodeURIComponent(u.hostname);
+      chrome.tabs.create({ url });
+    });
+  } catch (_) {
+    // 拿不到 hostname 就不显示这行；保持安静
+  }
+}
+loadCurrentHost();
+
 goBtn.addEventListener("click", async () => {
   const prefs = readPrefs();
   chrome.storage.sync.set(prefs);

@@ -7,39 +7,103 @@
       :root {
         color-scheme: light;
       }
+      * {
+        box-sizing: border-box;
+      }
       body {
-        max-width: 640px;
-        margin: 0 auto;
-        padding: 28px 32px 48px;
+        margin: 0;
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
         color: #1f2937;
         background: #f9fafb;
+        min-height: 100vh;
       }
-      h1 {
-        font-size: 20px;
+      .app {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 100vh;
+        max-width: 1100px;
+        margin: 0 auto;
+        background: #fff;
+      }
+      .sidebar {
+        background: #fff;
+        border-right: 1px solid #e5e7eb;
+        padding: 28px 16px 24px;
+        position: sticky;
+        top: 0;
+        align-self: start;
+        height: 100vh;
+        overflow-y: auto;
+      }
+      .sidebar h1 {
+        font-size: 16px;
+        margin: 0 0 2px;
+      }
+      .sidebar .brand-sub {
+        font-size: 11px;
+        color: #9ca3af;
+        margin: 0 0 22px;
+      }
+      .sidebar nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .nav-link {
+        display: block;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: #374151;
+        border-radius: 6px;
+        text-decoration: none;
+        cursor: pointer;
+        line-height: 1.4;
+      }
+      .nav-link:hover {
+        background: #f3f4f6;
+        text-decoration: none;
+      }
+      .nav-link.active {
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-weight: 500;
+      }
+      .content {
+        padding: 32px 36px 56px;
+        max-width: 760px;
+      }
+      .page {
+        display: none;
+      }
+      .page.active {
+        display: block;
+      }
+      .page-head h2 {
+        font-size: 18px;
         margin: 0 0 4px;
       }
-      .subtitle {
+      .page-head .page-desc {
         font-size: 12px;
         color: #6b7280;
-        margin: 0 0 24px;
+        margin: 0 0 22px;
+        line-height: 1.6;
       }
       .card {
         background: #fff;
         border: 1px solid #e5e7eb;
         border-radius: 10px;
-        padding: 20px 22px;
-        margin-bottom: 18px;
+        padding: 18px 20px;
+        margin-bottom: 16px;
       }
-      .card h2 {
-        font-size: 15px;
+      .card h3 {
+        font-size: 14px;
         margin: 0 0 4px;
       }
       .card .desc {
         font-size: 12px;
         color: #6b7280;
-        margin: 0 0 16px;
-        line-height: 1.5;
+        margin: 0 0 14px;
+        line-height: 1.6;
       }
       label {
         font-size: 12px;
@@ -57,7 +121,6 @@
         border-radius: 6px;
         margin-bottom: 14px;
         background: #fff;
-        box-sizing: border-box;
         font-family: inherit;
       }
       select:focus,
@@ -78,7 +141,7 @@
         font-size: 13px;
         color: #374151;
         margin: 0;
-        padding: 4px 0;
+        padding: 4px 0 10px;
       }
       .row-check input {
         margin: 0;
@@ -91,9 +154,18 @@
         border: 1px solid #e5e7eb;
         border-radius: 6px;
         cursor: pointer;
+        font-family: inherit;
       }
       button:hover {
         background: #e5e7eb;
+      }
+      button.primary {
+        color: #fff;
+        background: #2563eb;
+        border-color: #2563eb;
+      }
+      button.primary:hover {
+        background: #1d4ed8;
       }
       button.danger {
         color: #b91c1c;
@@ -102,6 +174,16 @@
       }
       button.danger:hover {
         background: #fee2e2;
+      }
+      button.subtle {
+        background: transparent;
+        border-color: transparent;
+        padding: 4px 8px;
+        color: #6b7280;
+      }
+      button.subtle:hover {
+        background: #f3f4f6;
+        color: #1f2937;
       }
       .btn-row {
         display: flex;
@@ -121,16 +203,6 @@
       }
       .test-status.err {
         color: #dc2626;
-      }
-      .saved-hint {
-        font-size: 11px;
-        color: #9ca3af;
-        margin-top: 6px;
-        height: 14px;
-        transition: opacity 0.3s;
-      }
-      .saved-hint.show {
-        color: #16a34a;
       }
       .stats {
         display: grid;
@@ -174,203 +246,517 @@
       a:hover {
         text-decoration: underline;
       }
-      .footer {
-        font-size: 11px;
+      .saved-hint {
+        position: fixed;
+        right: 24px;
+        bottom: 18px;
+        font-size: 12px;
+        color: #fff;
+        background: #16a34a;
+        padding: 6px 12px;
+        border-radius: 999px;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.2s, transform 0.2s;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      }
+      .saved-hint.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* 站点规则 */
+      .rules-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .rules-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 20px;
+      }
+      .rules-list .empty {
         color: #9ca3af;
+        font-size: 13px;
+        padding: 16px;
+        background: #f9fafb;
+        border: 1px dashed #e5e7eb;
+        border-radius: 8px;
         text-align: center;
-        margin-top: 24px;
-        line-height: 1.6;
+      }
+      .rule-item {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+      }
+      .rule-item.disabled {
+        opacity: 0.6;
+      }
+      .rule-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .rule-pattern {
+        font-family: ui-monospace, "SF Mono", Consolas, monospace;
+        font-size: 13px;
+        font-weight: 500;
+        color: #1f2937;
+        word-break: break-all;
+      }
+      .rule-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .rule-enabled {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: #6b7280;
+        margin-right: 4px;
+      }
+      .rule-enabled input {
+        margin: 0;
+      }
+      .rule-overrides {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .rule-tag {
+        font-size: 11px;
+        color: #1d4ed8;
+        background: #eff6ff;
+        border: 1px solid #dbeafe;
+        border-radius: 4px;
+        padding: 2px 6px;
+      }
+      .rule-tag.muted {
+        color: #6b7280;
+        background: #f3f4f6;
+        border-color: #e5e7eb;
+      }
+      .rule-editor {
+        background: #fff;
+        border: 1px solid #2563eb;
+        border-radius: 10px;
+        padding: 18px 20px;
+        margin-top: 12px;
+      }
+      .rule-editor.hidden {
+        display: none;
+      }
+      .rule-editor h3 {
+        font-size: 14px;
+        margin: 0 0 4px;
+      }
+      .rule-editor .hint {
+        font-size: 11px;
+        color: #6b7280;
+        margin: 4px 0 12px;
+        line-height: 1.5;
+      }
+      .rule-editor h4 {
+        font-size: 12px;
+        font-weight: 600;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 14px 0 8px;
+      }
+      code {
+        font-family: ui-monospace, "SF Mono", Consolas, monospace;
+        font-size: 11px;
+        background: #f3f4f6;
+        border-radius: 3px;
+        padding: 0 4px;
       }
     </style>
   </head>
   <body>
-    <h1>沉浸式翻译 Lite — 设置</h1>
-    <p class="subtitle">所有改动会自动保存；与扩展弹窗共享同一份偏好。</p>
+    <div class="app">
+      <aside class="sidebar">
+        <h1>沉浸式翻译 Lite</h1>
+        <p class="brand-sub">扩展设置</p>
+        <nav>
+          <a class="nav-link" data-page="general" href="#general">基础翻译</a>
+          <a class="nav-link" data-page="hover" href="#hover">悬停翻译</a>
+          <a class="nav-link" data-page="selection" href="#selection">划词翻译</a>
+          <a class="nav-link" data-page="input" href="#input">输入框翻译</a>
+          <a class="nav-link" data-page="providers" href="#providers">翻译服务</a>
+          <a class="nav-link" data-page="site-rules" href="#site-rules">站点规则</a>
+          <a class="nav-link" data-page="cache" href="#cache">本地缓存</a>
+        </nav>
+      </aside>
 
-    <div class="card">
-      <h2>基础翻译</h2>
-      <p class="desc">整页翻译的目标语言、使用的翻译服务、双语对照样式与动态内容支持。</p>
+      <main class="content">
+        <!-- 基础翻译 -->
+        <section class="page" data-page="general">
+          <div class="page-head">
+            <h2>基础翻译</h2>
+            <p class="page-desc">整页翻译的全局默认：目标语言、翻译服务、双语对照样式与动态内容支持。可被"站点规则"按域名覆盖。</p>
+          </div>
 
-      <div class="row-grid">
-        <div>
-          <label for="target-lang">目标语言</label>
-          <select id="target-lang">
-            <option value="zh-CN">中文（简体）</option>
-            <option value="zh-TW">中文（繁体）</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-            <option value="fr">Français</option>
-            <option value="de">Deutsch</option>
-            <option value="es">Español</option>
-          </select>
-        </div>
-        <div>
-          <label for="provider">翻译服务</label>
-          <select id="provider">
-            <option value="google">Google（免费）</option>
-            <option value="microsoft">Microsoft Translator</option>
-            <option value="youdao">有道智云</option>
-          </select>
-        </div>
-      </div>
+          <div class="card">
+            <div class="row-grid">
+              <div>
+                <label for="target-lang">目标语言</label>
+                <select id="target-lang">
+                  <option value="zh-CN">中文（简体）</option>
+                  <option value="zh-TW">中文（繁体）</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <div>
+                <label for="provider">翻译服务</label>
+                <select id="provider">
+                  <option value="google">Google（免费）</option>
+                  <option value="microsoft">Microsoft Translator</option>
+                  <option value="youdao">有道智云</option>
+                </select>
+              </div>
+            </div>
 
-      <label for="style">译文样式</label>
-      <select id="style">
-        <option value="default">默认（蓝色虚线）</option>
-        <option value="underline">下划线</option>
-        <option value="blur">模糊（悬停显示）</option>
-        <option value="bold">加粗</option>
-        <option value="card">卡片</option>
-      </select>
+            <label for="style">译文样式</label>
+            <select id="style">
+              <option value="default">默认（蓝色虚线）</option>
+              <option value="underline">下划线</option>
+              <option value="blur">模糊（悬停显示）</option>
+              <option value="bold">加粗</option>
+              <option value="card">卡片</option>
+            </select>
 
-      <label class="row-check">
-        <input type="checkbox" id="observer" />
-        自动翻译动态加载的内容（SPA / 无限滚动）
-      </label>
+            <label class="row-check">
+              <input type="checkbox" id="observer" />
+              自动翻译动态加载的内容（SPA / 无限滚动）
+            </label>
+          </div>
+        </section>
+
+        <!-- 悬停翻译 -->
+        <section class="page" data-page="hover">
+          <div class="page-head">
+            <h2>悬停翻译</h2>
+            <p class="page-desc">不开整页翻译时，按住修饰键 + 悬停段落即时翻译单段，零侵入。</p>
+          </div>
+
+          <div class="card">
+            <label for="hover-key">触发方式</label>
+            <select id="hover-key">
+              <option value="off">关闭</option>
+              <option value="alt">按住 Alt + 悬停</option>
+              <option value="ctrl">按住 Ctrl + 悬停</option>
+              <option value="shift">按住 Shift + 悬停</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- 划词翻译 -->
+        <section class="page" data-page="selection">
+          <div class="page-head">
+            <h2>划词翻译</h2>
+            <p class="page-desc">选中文本后弹出气泡显示译文；命中单个词时显示词典释义（音标、词性、例句）。</p>
+          </div>
+
+          <div class="card">
+            <label for="selection-translate">触发方式</label>
+            <select id="selection-translate">
+              <option value="off">关闭</option>
+              <option value="button">选中后显示翻译按钮</option>
+              <option value="auto">选中即自动翻译</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- 输入框翻译 -->
+        <section class="page" data-page="input">
+          <div class="page-head">
+            <h2>输入框翻译</h2>
+            <p class="page-desc">
+              在 <code>&lt;textarea&gt;</code> / <code>&lt;input&gt;</code> / contenteditable
+              中连按多次空格触发翻译，按"源语言 → 目标语言"方向替换。中文输入法的空格选词不会被拦截。
+            </p>
+          </div>
+
+          <div class="card">
+            <label for="input-translate">触发方式</label>
+            <select id="input-translate">
+              <option value="off">关闭</option>
+              <option value="space3">连按 3 次空格触发</option>
+            </select>
+
+            <div class="row-grid">
+              <div>
+                <label for="input-source-lang">源语言</label>
+                <select id="input-source-lang">
+                  <option value="auto">自动检测</option>
+                  <option value="zh-CN">中文（简体）</option>
+                  <option value="zh-TW">中文（繁体）</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <div>
+                <label for="input-target-lang">目标语言</label>
+                <select id="input-target-lang">
+                  <option value="en">English</option>
+                  <option value="zh-CN">中文（简体）</option>
+                  <option value="zh-TW">中文（繁体）</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 翻译服务 -->
+        <section class="page" data-page="providers">
+          <div class="page-head">
+            <h2>翻译服务凭证</h2>
+            <p class="page-desc">仅本扩展可见；同步到 <code>chrome.storage.sync</code>，与偏好分开存放。Google 免费接口无需凭证。</p>
+          </div>
+
+          <div class="card">
+            <h3>Microsoft Translator</h3>
+            <p class="desc">
+              使用 Azure 认知服务的 Translator 资源。需要在
+              <a href="https://portal.azure.com/" target="_blank" rel="noopener">Azure 门户</a>
+              创建资源后获取 Key 与所在 Region。免费层 F0 每月 200 万字符。
+            </p>
+
+            <label for="ms-key">API Key</label>
+            <input type="password" id="ms-key" placeholder="32 位密钥" autocomplete="off" spellcheck="false" />
+
+            <label for="ms-region">Region（资源所在区域）</label>
+            <input type="text" id="ms-region" placeholder="eastasia / japaneast / ..." spellcheck="false" />
+
+            <button id="ms-test">测试连接</button>
+            <div id="ms-test-status" class="test-status"></div>
+          </div>
+
+          <div class="card">
+            <h3>有道智云翻译</h3>
+            <p class="desc">
+              使用网易有道智云平台的翻译 API。需要在
+              <a href="https://ai.youdao.com/" target="_blank" rel="noopener">有道智云控制台</a>
+              创建"文本翻译"应用后获取 App Key 与 App Secret。新用户赠送约 500 万字符的免费额度。
+            </p>
+
+            <label for="yd-app-key">App Key（应用 ID）</label>
+            <input type="text" id="yd-app-key" placeholder="例如 12abc34d56ef7890" autocomplete="off" spellcheck="false" />
+
+            <label for="yd-app-secret">App Secret（应用密钥）</label>
+            <input type="password" id="yd-app-secret" placeholder="32 位密钥" autocomplete="off" spellcheck="false" />
+
+            <button id="yd-test">测试连接</button>
+            <div id="yd-test-status" class="test-status"></div>
+          </div>
+        </section>
+
+        <!-- 站点规则 -->
+        <section class="page" data-page="site-rules">
+          <div class="page-head">
+            <h2>站点规则</h2>
+            <p class="page-desc">
+              为特定域名定制偏好（目标语言、翻译服务、悬停 / 划词 / 输入框翻译 等）。
+              命中时覆盖全局设置；多条规则匹配同一域名时，<strong>pattern 最长者</strong>优先。
+              支持 <code>example.com</code>（含子域）或 <code>*.example.com</code>（仅子域）。
+            </p>
+          </div>
+
+          <div class="rules-toolbar">
+            <span id="rules-summary" style="font-size: 12px; color: #6b7280;">—</span>
+            <button id="rule-add" class="primary">+ 添加规则</button>
+          </div>
+
+          <ul id="rules-list" class="rules-list"></ul>
+
+          <div id="rule-editor" class="rule-editor hidden">
+            <h3 id="rule-editor-title">添加规则</h3>
+            <p class="hint">匹配规则按 hostname 后缀做（子域同样命中）；留空字段表示"继承全局设置"。</p>
+
+            <label for="rule-pattern">域名 pattern</label>
+            <input type="text" id="rule-pattern" placeholder="例如 github.com 或 *.example.com" spellcheck="false" />
+
+            <h4>覆盖的偏好</h4>
+
+            <div class="row-grid">
+              <div>
+                <label for="rule-target-lang">目标语言</label>
+                <select id="rule-target-lang">
+                  <option value="">继承全局</option>
+                  <option value="zh-CN">中文（简体）</option>
+                  <option value="zh-TW">中文（繁体）</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <div>
+                <label for="rule-provider">翻译服务</label>
+                <select id="rule-provider">
+                  <option value="">继承全局</option>
+                  <option value="google">Google（免费）</option>
+                  <option value="microsoft">Microsoft Translator</option>
+                  <option value="youdao">有道智云</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row-grid">
+              <div>
+                <label for="rule-style">译文样式</label>
+                <select id="rule-style">
+                  <option value="">继承全局</option>
+                  <option value="default">默认（蓝色虚线）</option>
+                  <option value="underline">下划线</option>
+                  <option value="blur">模糊（悬停显示）</option>
+                  <option value="bold">加粗</option>
+                  <option value="card">卡片</option>
+                </select>
+              </div>
+              <div>
+                <label for="rule-observer">动态内容</label>
+                <select id="rule-observer">
+                  <option value="">继承全局</option>
+                  <option value="true">启用</option>
+                  <option value="false">禁用</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row-grid">
+              <div>
+                <label for="rule-hover-key">悬停翻译</label>
+                <select id="rule-hover-key">
+                  <option value="">继承全局</option>
+                  <option value="off">关闭</option>
+                  <option value="alt">Alt + 悬停</option>
+                  <option value="ctrl">Ctrl + 悬停</option>
+                  <option value="shift">Shift + 悬停</option>
+                </select>
+              </div>
+              <div>
+                <label for="rule-selection-translate">划词翻译</label>
+                <select id="rule-selection-translate">
+                  <option value="">继承全局</option>
+                  <option value="off">关闭</option>
+                  <option value="button">显示翻译按钮</option>
+                  <option value="auto">自动翻译</option>
+                </select>
+              </div>
+            </div>
+
+            <label for="rule-input-translate">输入框翻译</label>
+            <select id="rule-input-translate">
+              <option value="">继承全局</option>
+              <option value="off">关闭</option>
+              <option value="space3">连按 3 次空格触发</option>
+            </select>
+
+            <div class="row-grid">
+              <div>
+                <label for="rule-input-source-lang">输入框源语言</label>
+                <select id="rule-input-source-lang">
+                  <option value="">继承全局</option>
+                  <option value="auto">自动检测</option>
+                  <option value="zh-CN">中文（简体）</option>
+                  <option value="zh-TW">中文（繁体）</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <div>
+                <label for="rule-input-target-lang">输入框目标语言</label>
+                <select id="rule-input-target-lang">
+                  <option value="">继承全局</option>
+                  <option value="en">English</option>
+                  <option value="zh-CN">中文（简体）</option>
+                  <option value="zh-TW">中文（繁体）</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="btn-row">
+              <button id="rule-save" class="primary">保存</button>
+              <button id="rule-cancel">取消</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 本地缓存 -->
+        <section class="page" data-page="cache">
+          <div class="page-head">
+            <h2>本地翻译缓存</h2>
+            <p class="page-desc">
+              相同段落短期内重复翻译命中缓存，省流量、扛限流。TTL 7 天，容量上限 5000 条，
+              超出按时间淘汰最旧的。key 包含翻译服务、源/目标语言、词典模式，互不污染。
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="stats">
+              <div class="stat">
+                <div class="stat-label">缓存条目</div>
+                <div class="stat-value" id="cache-count">—</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">最早记录</div>
+                <div class="stat-value" id="cache-oldest">—</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">最新记录</div>
+                <div class="stat-value" id="cache-newest">—</div>
+              </div>
+            </div>
+
+            <div class="btn-row">
+              <button id="cache-refresh">刷新统计</button>
+              <button id="cache-cleanup">清理过期</button>
+              <button id="cache-clear" class="danger">清空全部</button>
+            </div>
+            <div id="cache-status" class="cache-status"></div>
+          </div>
+        </section>
+      </main>
     </div>
 
-    <div class="card">
-      <h2>悬停翻译</h2>
-      <p class="desc">不开整页翻译时，按住修饰键 + 悬停段落即时翻译单段。</p>
-
-      <label for="hover-key">触发方式</label>
-      <select id="hover-key">
-        <option value="off">关闭</option>
-        <option value="alt">按住 Alt + 悬停</option>
-        <option value="ctrl">按住 Ctrl + 悬停</option>
-        <option value="shift">按住 Shift + 悬停</option>
-      </select>
-    </div>
-
-    <div class="card">
-      <h2>划词翻译</h2>
-      <p class="desc">选中文本后弹出气泡显示译文；命中单词时显示词典释义。</p>
-
-      <label for="selection-translate">触发方式</label>
-      <select id="selection-translate">
-        <option value="off">关闭</option>
-        <option value="button">选中后显示翻译按钮</option>
-        <option value="auto">选中即自动翻译</option>
-      </select>
-    </div>
-
-    <div class="card">
-      <h2>输入框翻译</h2>
-      <p class="desc">
-        在 <code>&lt;textarea&gt;</code> / <code>&lt;input&gt;</code> / contenteditable
-        中连按多次空格触发翻译，按"源语言 → 目标语言"方向替换。中文输入法的空格选词不会被拦截。
-      </p>
-
-      <label for="input-translate">触发方式</label>
-      <select id="input-translate">
-        <option value="off">关闭</option>
-        <option value="space3">连按 3 次空格触发</option>
-      </select>
-
-      <div class="row-grid">
-        <div>
-          <label for="input-source-lang">源语言</label>
-          <select id="input-source-lang">
-            <option value="auto">自动检测</option>
-            <option value="zh-CN">中文（简体）</option>
-            <option value="zh-TW">中文（繁体）</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-            <option value="fr">Français</option>
-            <option value="de">Deutsch</option>
-            <option value="es">Español</option>
-          </select>
-        </div>
-        <div>
-          <label for="input-target-lang">目标语言</label>
-          <select id="input-target-lang">
-            <option value="en">English</option>
-            <option value="zh-CN">中文（简体）</option>
-            <option value="zh-TW">中文（繁体）</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-            <option value="fr">Français</option>
-            <option value="de">Deutsch</option>
-            <option value="es">Español</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Microsoft Translator</h2>
-      <p class="desc">
-        使用 Azure 认知服务的 Translator 资源。需要在
-        <a href="https://portal.azure.com/" target="_blank" rel="noopener">Azure 门户</a>
-        创建资源后获取 Key 与所在 Region。免费层 F0 每月 200 万字符。
-      </p>
-
-      <label for="ms-key">API Key</label>
-      <input type="password" id="ms-key" placeholder="32 位密钥" autocomplete="off" spellcheck="false" />
-
-      <label for="ms-region">Region（资源所在区域）</label>
-      <input type="text" id="ms-region" placeholder="eastasia / japaneast / ..." spellcheck="false" />
-
-      <button id="ms-test">测试连接</button>
-      <div id="ms-test-status" class="test-status"></div>
-    </div>
-
-    <div class="card">
-      <h2>有道智云翻译</h2>
-      <p class="desc">
-        使用网易有道智云平台的翻译 API。需要在
-        <a href="https://ai.youdao.com/" target="_blank" rel="noopener">有道智云控制台</a>
-        创建"文本翻译"应用后获取 App Key 与 App Secret。新用户赠送约 500 万字符的免费额度。
-      </p>
-
-      <label for="yd-app-key">App Key（应用 ID）</label>
-      <input type="text" id="yd-app-key" placeholder="例如 12abc34d56ef7890" autocomplete="off" spellcheck="false" />
-
-      <label for="yd-app-secret">App Secret（应用密钥）</label>
-      <input type="password" id="yd-app-secret" placeholder="32 位密钥" autocomplete="off" spellcheck="false" />
-
-      <button id="yd-test">测试连接</button>
-      <div id="yd-test-status" class="test-status"></div>
-    </div>
-
-    <div class="card">
-      <h2>本地缓存</h2>
-      <p class="desc">
-        相同段落短期内重复翻译命中缓存，省流量、扛限流。TTL 7 天，容量上限 5000 条，
-        超出按时间淘汰最旧的。key 包含翻译服务、源/目标语言、词典模式，互不污染。
-      </p>
-
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-label">缓存条目</div>
-          <div class="stat-value" id="cache-count">—</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">最早记录</div>
-          <div class="stat-value" id="cache-oldest">—</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">最新记录</div>
-          <div class="stat-value" id="cache-newest">—</div>
-        </div>
-      </div>
-
-      <div class="btn-row">
-        <button id="cache-refresh">刷新统计</button>
-        <button id="cache-cleanup">清理过期</button>
-        <button id="cache-clear" class="danger">清空全部</button>
-      </div>
-      <div id="cache-status" class="cache-status"></div>
-    </div>
-
-    <div id="saved-hint" class="saved-hint"></div>
-
-    <p class="footer">
-      偏好与凭证均同步到 <code>chrome.storage.sync</code>，跨设备共享；缓存仅本地存储。<br />
-      快捷键 Alt+T 可开关整页翻译。
-    </p>
+    <div id="saved-hint" class="saved-hint">已保存</div>
 
     <script src="options.js"></script>
   </body>

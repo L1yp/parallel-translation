@@ -13,6 +13,7 @@
   const INPUT_TYPES = new Set(["text", "search", "email", "url", "tel"]);
 
   let isOn = false;
+  // 最终生效偏好（= 全局基线 ⊕ 命中的站点规则）。下方代码统一读这些变量。
   let targetLang = DEFAULT_TARGET;
   let provider = "google";
   let style = "default";
@@ -22,6 +23,21 @@
   let inputSourceLang = "auto"; // 输入框翻译的源语言；auto 让 provider 自动识别
   let inputTargetLang = "en"; // 输入框翻译的目标语言（默认 en：用户写中文 → 英文）
   let selectionTranslate = "off"; // off | button | auto
+
+  // 全局基线偏好（来自 popup / 设置页 / toggle 消息）。站点规则按 hostname 命中后覆盖到上面的 let 变量。
+  const basePrefs = {
+    targetLang: DEFAULT_TARGET,
+    provider: "google",
+    style: "default",
+    observerEnabled: true,
+    hoverKey: "alt",
+    inputTranslate: "off",
+    inputSourceLang: "auto",
+    inputTargetLang: "en",
+    selectionTranslate: "off",
+  };
+  const PREF_KEYS = Object.keys(basePrefs);
+  let siteRules = [];
 
   // 作为"翻译单元"的块级元素。选叶子节点，避免父子重复翻译。
   const BLOCK_SELECTOR =
@@ -709,60 +725,111 @@
     }
   }
 
-  // —— 偏好读取 / 变更同步 ————————————————————————————————————
+  // —— 站点规则 ————————————————————————————————————————————————
 
-  function applyPrefs(p) {
-    if (!p) return;
-    if (typeof p.targetLang === "string") targetLang = p.targetLang;
-    if (typeof p.provider === "string") provider = p.provider;
-    if (typeof p.style === "string") style = p.style;
-    if (typeof p.observerEnabled === "boolean") observerEnabled = p.observerEnabled;
-    if (typeof p.hoverKey === "string") hoverKey = p.hoverKey;
-    if (typeof p.inputTranslate === "string") inputTranslate = p.inputTranslate;
-    if (typeof p.inputSourceLang === "string") inputSourceLang = p.inputSourceLang;
-    if (typeof p.inputTargetLang === "string") inputTargetLang = p.inputTargetLang;
-    if (typeof p.selectionTranslate === "string") selectionTranslate = p.selectionTranslate;
+  // 单条规则形如 { id, pattern, enabled, [overridable pref keys] }。
+  // 仅当某偏好 key 存在于规则对象时才视为覆盖；不存在 / 空串视为"继承全局"。
+  function matchesHost(host, pattern) {
+    if (!host || !pattern) return false;
+    host = host.toLowerCase();
+    pattern = String(pattern).toLowerCase().trim();
+    if (!pattern) return false;
+    if (pattern.startsWith("*.")) {
+      const tail = pattern.slice(2);
+      return host === tail || host.endsWith("." + tail);
+    }
+    return host === pattern || host.endsWith("." + pattern);
   }
 
-  chrome.storage.sync.get(
-    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate", "inputSourceLang", "inputTargetLang", "selectionTranslate"],
-    (res) => {
-      applyPrefs(res);
-      refreshHoverListener();
-      refreshInputListener();
-      refreshSelectionListener();
+  // 最长 pattern 优先（intuition: 更精确的规则胜过宽泛的）
+  function pickRule(rules, host) {
+    if (!Array.isArray(rules) || !host) return null;
+    let best = null;
+    let bestLen = -1;
+    for (const r of rules) {
+      if (!r || r.enabled === false || !r.pattern) continue;
+      if (!matchesHost(host, r.pattern)) continue;
+      const len = String(r.pattern).length;
+      if (len > bestLen) { best = r; bestLen = len; }
     }
-  );
+    return best;
+  }
+
+  function computeEffective() {
+    const rule = pickRule(siteRules, location.hostname);
+    const out = { ...basePrefs };
+    if (rule) {
+      for (const k of PREF_KEYS) {
+        if (!(k in rule)) continue;
+        const v = rule[k];
+        if (v === undefined || v === null || v === "") continue;
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+
+  // 站点规则或基线偏好变化时调用：写回模块顶部的生效变量 + 必要时刷新监听器 / 样式 / observer。
+  function recomputeEffective() {
+    const eff = computeEffective();
+    const prevStyle = style;
+    const prevObserver = observerEnabled;
+
+    targetLang = eff.targetLang;
+    provider = eff.provider;
+    style = eff.style;
+    observerEnabled = !!eff.observerEnabled;
+    hoverKey = eff.hoverKey;
+    inputTranslate = eff.inputTranslate;
+    inputSourceLang = eff.inputSourceLang;
+    inputTargetLang = eff.inputTargetLang;
+    selectionTranslate = eff.selectionTranslate;
+
+    if (prevStyle !== style) refreshExistingStyles();
+    refreshHoverListener();
+    refreshSelectionListener();
+    refreshInputListener();
+    if (isOn && prevObserver !== observerEnabled) {
+      if (observerEnabled) startObserver();
+      else stopObserver();
+    }
+  }
+
+  // —— 偏好读取 / 变更同步 ————————————————————————————————————
+
+  // 把 popup / 设置页 / toggle 消息里的字段写进基线（带类型校验），不直接动生效变量。
+  function applyPrefs(p) {
+    if (!p) return;
+    for (const k of PREF_KEYS) {
+      if (!(k in p)) continue;
+      const v = p[k];
+      if (k === "observerEnabled") {
+        if (typeof v === "boolean") basePrefs[k] = v;
+      } else if (typeof v === "string") {
+        basePrefs[k] = v;
+      }
+    }
+  }
+
+  chrome.storage.sync.get([...PREF_KEYS, "siteRules"], (res) => {
+    applyPrefs(res);
+    if (Array.isArray(res.siteRules)) siteRules = res.siteRules;
+    recomputeEffective();
+  });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "sync") return;
-    if (changes.targetLang) targetLang = changes.targetLang.newValue;
-    if (changes.provider) provider = changes.provider.newValue;
-    if (changes.hoverKey) {
-      hoverKey = changes.hoverKey.newValue;
-      refreshHoverListener();
+    let touched = false;
+    const patch = {};
+    for (const k of PREF_KEYS) {
+      if (k in changes) { patch[k] = changes[k].newValue; touched = true; }
     }
-    if (changes.inputTranslate) {
-      inputTranslate = changes.inputTranslate.newValue;
-      refreshInputListener();
+    if (touched) applyPrefs(patch);
+    if ("siteRules" in changes) {
+      siteRules = Array.isArray(changes.siteRules.newValue) ? changes.siteRules.newValue : [];
+      touched = true;
     }
-    if (changes.inputSourceLang) inputSourceLang = changes.inputSourceLang.newValue;
-    if (changes.inputTargetLang) inputTargetLang = changes.inputTargetLang.newValue;
-    if (changes.selectionTranslate) {
-      selectionTranslate = changes.selectionTranslate.newValue;
-      refreshSelectionListener();
-    }
-    if (changes.style) {
-      style = changes.style.newValue;
-      refreshExistingStyles();
-    }
-    if (changes.observerEnabled) {
-      observerEnabled = changes.observerEnabled.newValue;
-      if (isOn) {
-        if (observerEnabled) startObserver();
-        else stopObserver();
-      }
-    }
+    if (touched) recomputeEffective();
   });
 
   // —— 来自 popup / 快捷键的消息 ————————————————————————————
@@ -770,9 +837,7 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === "toggle") {
       applyPrefs(msg);
-      refreshHoverListener();
-      refreshInputListener();
-      refreshSelectionListener();
+      recomputeEffective();
       if (isOn) {
         turnOff();
         sendResponse({ state: "off" });

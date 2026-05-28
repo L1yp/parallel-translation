@@ -14,9 +14,9 @@
 - **`background.js`** —— Service Worker（ES module）。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。也监听 `chrome.commands.onCommand`，把快捷键转成 `toggle` 消息发给当前 tab。
 - **`cache.js`** —— Service Worker 内的 IndexedDB 翻译缓存层。`handleTranslate` 入口先 `cacheGet` 命中直接返回，未命中走 provider，成功 `cacheSet`。key = `sha1(provider + text + targetLang + sourceLang + wantDict)`，TTL 7 天，容量上限 5000 条，超出按 createdAt 升序淘汰。冷启动懒触发一次 cleanup（`maybeCleanupCache`，标志位防重）。缓存命中对所有 caller（页面/悬停/输入框/划词）透明，无需改 content 侧。**任何 IDB 错误都吞掉**，缓存层永远不能阻断翻译主流程。同时暴露 `cacheStats` / `cacheClearAll` / `cleanupCache` 给设置页缓存管理面板使用，对应 background 的 `cache-stats` / `cache-cleanup` / `cache-clear` 三条消息。
 - **`providers/`** —— 翻译服务实现。`providers/index.js` 提供 `translate(name, text, targetLang, config)` 路由，返回 `{text}`。当前两个 provider：`google.js`（免费）和 `microsoft.js`（Azure Translator）。**敏感配置（API Key 等）由 background 从 `chrome.storage.sync` 读取后注入 provider，永远不进 content.js 上下文**。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
-- **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译、输入框三击空格翻译、划词翻译气泡。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
-- **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、选输入框翻译触发方式、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。配置按"基础翻译 / 悬停翻译 / 划词翻译 / 输入框翻译"四组（`.group` + `.group-title`）聚合，便于视觉扫描。
-- **`options.html` / `options.js`** —— 独立设置页（`options_ui`，open_in_tab）。**镜像 popup 的全部偏好**（同步走 `chrome.storage.onChanged`，两边任一改动另一边立刻反映），按 4 组 card 分类排版，同时承载凭证（Microsoft / 有道）和**缓存管理**面板（条目数 / 最旧最新时间 / 刷新统计 / 清理过期 / 清空全部）。缓存操作走 `chrome.runtime.sendMessage` 委托给 background，不在设置页直开 IndexedDB，保持"IDB 持有者只有一个"。
+- **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译、输入框三击空格翻译、划词翻译气泡、**站点规则匹配/覆盖层**。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
+- **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、选输入框翻译触发方式、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。配置按"基础翻译 / 悬停翻译 / 划词翻译 / 输入框翻译"四组（`.group` + `.group-title`）聚合，便于视觉扫描。底部带"为当前站点定制规则"入口，从当前 tab 拿 hostname 后用 `chrome.tabs.create({ url: options.html#site-rules?host=<host> })` 跳到设置页（不能用 `openOptionsPage()`，它不支持 hash）。
+- **`options.html` / `options.js`** —— 独立设置页（`options_ui`，open_in_tab），**侧栏 + 多页面**布局：基础翻译 / 悬停翻译 / 划词翻译 / 输入框翻译 / 翻译服务（凭证）/ **站点规则** / 本地缓存。**镜像 popup 的全部偏好**（同步走 `chrome.storage.onChanged`，两边任一改动另一边立刻反映），同时承载凭证（Microsoft / 有道）、**站点规则 CRUD** 和**缓存管理**面板。路由用 `location.hash`（`#general` / `#hover` / ... / `#site-rules` / `#cache`），未知 hash 回退到默认页；popup 可深链 `#site-rules?host=<hostname>` 自动定位：等 `loadRules` 回来后用 `hostMatchesPattern` 找已有规则，命中则打开"编辑"，否则打开"新建"并预填 pattern。缓存操作走 `chrome.runtime.sendMessage` 委托给 background，不在设置页直开 IndexedDB，保持"IDB 持有者只有一个"。
 
 ### 关键消息流
 
@@ -116,6 +116,23 @@ Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体�
 
 **音频播放走 background 代理**：Google `translate_tts` 拒绝带第三方页面 Referer 的请求（用户在 github.com 选词触发时浏览器自动带 referer=github，被 Google 当爬虫挡了）；`<audio>` 元素又没有 `referrerPolicy` 属性可以控制。所以 content.js `playAudio` 发 `{type: "audio", url}` 给 background，background fetch 时 `referrerPolicy: "no-referrer"` 拿到音频字节，转 base64 data URL 回传，content.js 用 `new Audio(dataUrl).play()` 本地解码。这一并绕过页面 CSP `media-src` 限制。失败时 fallback 直接 `new Audio(url)` 试一次。manifest 的 host_permissions 必须包含 TTS 域：`translate.googleapis.com` / `openapi.youdao.com`。
 
+## 站点规则（按域名覆盖偏好）
+
+`chrome.storage.sync["siteRules"]` 存一个数组，元素形如：
+```
+{ id, pattern, enabled, [overridable pref keys...] }
+```
+可覆盖的 key 与全局偏好同名：`targetLang` / `provider` / `style` / `observerEnabled` / `hoverKey` / `selectionTranslate` / `inputTranslate` / `inputSourceLang` / `inputTargetLang`。**只在某 key 存在于规则对象上时视为覆盖**；空串 / undefined 不参与覆盖（设置页里下拉选"继承全局"即对应不设此 key）。
+
+匹配规则：
+- pattern 形如 `github.com`（hostname 后缀匹配，含子域）或 `*.example.com`（仅子域，不含裸域）。
+- 多条匹配时，**pattern 长度最大者胜**（更具体的规则覆盖更宽泛的）。`enabled: false` 跳过。
+
+content.js 的应用层：
+- 维护 `basePrefs`（全局基线）和 `siteRules` 两份独立 state，生效值通过 `recomputeEffective()` 合并后写入模块顶部的 `targetLang` / `provider` / ... let 变量。
+- 任一来源（`chrome.storage.onChanged` 同步基线或 `siteRules` / `toggle` 消息携带的偏好）变动后，都先更新 state，再 `recomputeEffective()` —— 它内部统一刷新 `refreshExistingStyles` / 三个 listener / observer 启停，调用方不用关心。
+- popup 发的 `toggle` 消息里携带的偏好是"基线"，**不要**绕过站点规则直接写生效变量，否则会让"按域名定制"被 toggle 一下就还原。
+
 ## 译文样式预设
 
 `content.css` 内置 5 种：`default` / `underline` / `blur` / `bold` / `card`。`style` 字段存 storage，content.js 在插入 `.itl-translation` 时挂 `.itl-style-xxx`。切换样式时 `refreshExistingStyles()` 会更新已插入的节点，无需还原重译。
@@ -153,9 +170,9 @@ Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体�
 | `providers/microsoft.js` | Microsoft Translator（Azure） |
 | `content.js` | DOM 遍历、并发调度、译文插入/清理、MutationObserver、悬停翻译、输入框三击空格翻译、划词翻译气泡 |
 | `content.css` | `.itl-translation` 译文块样式 + 5 种样式预设 |
-| `popup.html` | 弹窗 UI（含内联样式），按"基础/悬停/划词/输入框"四组聚合 |
+| `popup.html` | 弹窗 UI（含内联样式），按"基础/悬停/划词/输入框"四组聚合，底部带"为当前站点定制规则"入口 |
 | `popup.js` | 弹窗交互、`chrome.storage.sync` 持久化、监听 storage.onChanged 同步反映 options 改动 |
-| `options.html` | 设置页 UI：偏好镜像（4 组 card）+ 凭证 + 缓存管理面板 |
-| `options.js` | 设置页交互：偏好/凭证双向绑定、缓存统计/清理/清空走 `cache-*` 消息 |
+| `options.html` | 设置页 UI：侧栏 7 页（基础 / 悬停 / 划词 / 输入 / 翻译服务 / 站点规则 / 缓存）|
+| `options.js` | 设置页交互：hash 路由 + 偏好/凭证双向绑定 + 站点规则 CRUD + 缓存统计/清理/清空走 `cache-*` 消息 |
 | `README.md` | 面向用户的安装与使用说明 |
 | `docs/roadmap.md` | 开发路线图（功能调研 + P0/P1/P2 优先级） |

@@ -111,6 +111,23 @@
       .footer-bar a:hover {
         text-decoration: underline;
       }
+      .site-link-row {
+        margin-top: 8px;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .site-link-row a {
+        color: #2563eb;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .site-link-row a:hover {
+        text-decoration: underline;
+      }
+      .site-link-row .host {
+        color: #6b7280;
+        font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      }
       kbd {
         font-family: ui-monospace, "SF Mono", Consolas, monospace;
         font-size: 10px;
@@ -236,6 +253,10 @@
       <div class="footer-bar">
         <span>快捷键 <kbd>Alt</kbd>+<kbd>T</kbd> 切换</span>
         <a id="open-options">⚙ 更多设置</a>
+      </div>
+      <div class="site-link-row" id="customize-site-row" style="display: none;">
+        <a id="customize-site">🎯 为当前站点定制规则</a>
+        <span class="host" id="customize-site-host"></span>
       </div>
     </div>
     <script src="popup.js"></script>
