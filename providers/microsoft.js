@@ -15,20 +15,25 @@ function mapLang(lang) {
  * @param {string} text
  * @param {string} targetLang  例如 "zh-CN"
  * @param {{key:string, region:string, endpoint?:string}} config
+ * @param {{sourceLang?:string}} [options]  sourceLang 为 "auto" 或留空时不传 from 参数，让 Azure 自动检测
  * @returns {Promise<{text:string}>}
  */
-export async function translate(text, targetLang, config) {
+export async function translate(text, targetLang, config, options) {
   if (!config || !config.key) {
     throw new Error("Microsoft Translator 未配置 Key，请在弹窗设置中填写");
   }
   const region = config.region || "eastasia";
   const endpoint = (config.endpoint || "https://api.cognitive.microsofttranslator.com").replace(/\/$/, "");
   const to = mapLang(targetLang);
+  const sourceLang = options && options.sourceLang;
 
-  const url =
+  let url =
     endpoint + "/translate" +
     "?api-version=3.0" +
     "&to=" + encodeURIComponent(to);
+  if (sourceLang && sourceLang !== "auto") {
+    url += "&from=" + encodeURIComponent(mapLang(sourceLang));
+  }
 
   const res = await fetch(url, {
     method: "POST",

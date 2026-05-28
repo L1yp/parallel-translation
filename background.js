@@ -17,7 +17,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function handleTranslate(msg) {
   const provider = msg.provider || DEFAULT_PROVIDER;
   const config = await loadProviderConfig(provider);
-  const options = { wantDict: !!msg.wantDict };
+  const options = {
+    wantDict: !!msg.wantDict,
+    // "auto" 让 provider 自行检测；其它值会显式传给底层 API
+    sourceLang: msg.sourceLang || "auto",
+  };
   const result = await translate(provider, msg.text, msg.targetLang, config, options);
   if (options.wantDict) {
     console.log("[ITL bg] dict", { provider, text: msg.text, targetLang: msg.targetLang, dict: result.dict });
@@ -48,6 +52,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     "observerEnabled",
     "hoverKey",
     "inputTranslate",
+    "inputSourceLang",
     "inputTargetLang",
     "selectionTranslate",
     "provider",

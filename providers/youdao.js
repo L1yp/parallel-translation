@@ -43,7 +43,7 @@ function randSalt() {
  * @param {{appKey:string, appSecret:string}} config
  * @returns {Promise<{text:string, dict?:object}>}
  */
-export async function translate(text, targetLang, config /*, options */) {
+export async function translate(text, targetLang, config, options) {
   if (!config || !config.appKey || !config.appSecret) {
     throw new Error("有道智云未配置 App Key/App Secret，请在设置中填写");
   }
@@ -52,10 +52,11 @@ export async function translate(text, targetLang, config /*, options */) {
   const salt = randSalt();
   const curtime = Math.floor(Date.now() / 1000).toString();
   const sign = await sha256Hex(appKey + truncate(text) + salt + curtime + appSecret);
+  const sourceLang = (options && options.sourceLang) || "auto";
 
   const body = new URLSearchParams({
     q: text,
-    from: "auto",
+    from: sourceLang === "auto" ? "auto" : mapLang(sourceLang),
     to: mapLang(targetLang),
     appKey,
     salt,

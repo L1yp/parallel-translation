@@ -59,7 +59,17 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 
 `inputTranslate` ∈ `{off, space3}`，默认 `off`（会改变原生输入行为，opt-in 更安全）。开启后：document 级 `keydown`（capture）监听，连按 3 次空格（间隔 ≤ 700ms）触发；第 3 次按键 `preventDefault()` 拦掉，前两个已落键的空格在取文本时用 `replace(/ {1,2}$/, "")` 剥掉。
 
-**目标语言独立于页面翻译**：用单独的 `inputTargetLang` 字段（默认 `en`），不复用 `targetLang`。因为页面翻译是「外文 → 我读的语言」（zh-CN），输入框翻译方向相反：用户用熟悉的语言输入、想翻成不熟悉的语言发出去。`translateRemote(text, overrideTargetLang)` 接受可选第二参数，`handleInputTranslate` 显式传 `inputTargetLang`。
+**目标语言独立于页面翻译**：用单独的 `inputTargetLang` 字段（默认 `en`），不复用 `targetLang`。因为页面翻译是「外文 → 我读的语言」（zh-CN），输入框翻译方向相反：用户用熟悉的语言输入、想翻成不熟悉的语言发出去。
+
+**源语言也单独配置**：`inputSourceLang` 字段（默认 `"auto"`）。auto 让 provider 自行识别；某些短句、人名、混合语言场景下自动检测会失败，让用户显式锁定源语言（比如固定 zh-CN → en），翻译质量更稳。
+
+provider 接口里 `options.sourceLang` 走完整链路：
+
+- Google：拼到 URL 的 `sl=` 参数（原本硬编码 `sl=auto`）
+- Microsoft：`sourceLang === "auto"` 时省略 `from` 参数让 Azure 自动检测，否则 `from=mapLang(sourceLang)`
+- Youdao：`from=auto` 或 `from=mapLang(sourceLang)`
+
+`translateRemote(text, opts?)` 现在收 options 对象：`{ targetLang?, sourceLang?, wantDict? }`。原来的位置参数已淘汰，新增 caller 请走 opts。
 
 支持的元素：
 
@@ -119,7 +129,7 @@ Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体�
 - **不要把样式预设的 class 加到原文 `el` 上**：`.itl-style-xxx` 只挂在 `.itl-translation` 子节点上；挂到原文节点会污染原网页样式且 `turnOff()` 不会清。
 - **新增 provider 时不要在 content.js 里加分支**：路由集中在 `providers/index.js`。content.js 只透传 `provider` 字符串。
 - **API Key 永远不进 content.js**：popup 写入 `chrome.storage.sync`，background 在 `handleTranslate` 里读取后传入 provider。content.js 不应感知任何凭证字段。
-- **provider 接口签名**：`translate(text, targetLang, config?, options?) -> {text, dict?}`。必须返回对象。`options.wantDict` 为 `true` 时尽量返回 `dict`（音标 / 词性释义 / 例句 / 网络释义），不支持就不带这个字段，content.js 会降级为纯译文。
+- **provider 接口签名**：`translate(text, targetLang, config?, options?) -> {text, dict?}`。必须返回对象。`options.wantDict` 为 `true` 时尽量返回 `dict`（音标 / 词性释义 / 例句 / 网络释义），不支持就不带这个字段，content.js 会降级为纯译文。`options.sourceLang` 为 `"auto"` 或省略时由 provider 自动检测，否则显式指定源语言代码（如 `"zh-CN"`），各 provider 自行映射成底层 API 格式。
 
 ## 文件清单
 

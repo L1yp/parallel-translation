@@ -19,6 +19,7 @@
   let observerEnabled = true;
   let hoverKey = "alt"; // alt | ctrl | shift | off
   let inputTranslate = "off"; // off | space3
+  let inputSourceLang = "auto"; // 输入框翻译的源语言；auto 让 provider 自动识别
   let inputTargetLang = "en"; // 输入框翻译的目标语言（默认 en：用户写中文 → 英文）
   let selectionTranslate = "off"; // off | button | auto
 
@@ -53,16 +54,20 @@
     return all.filter(isLeafBlock);
   }
 
-  // 返回 { text, dict }。dict 仅在 wantDict 且 provider 返回时存在（例如选区命中单词）。
-  function translateRemote(text, overrideTargetLang, wantDict) {
+  // 返回 { text, dict }。dict 仅在 opts.wantDict 且 provider 返回时存在（例如选区命中单词）。
+  // opts: { targetLang?, sourceLang?, wantDict? }
+  // targetLang/sourceLang 不传则用全局 targetLang / "auto"。
+  function translateRemote(text, opts) {
+    const o = opts || {};
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         {
           type: "translate",
           text,
-          targetLang: overrideTargetLang || targetLang,
+          targetLang: o.targetLang || targetLang,
+          sourceLang: o.sourceLang || "auto",
           provider,
-          wantDict: !!wantDict,
+          wantDict: !!o.wantDict,
         },
         (resp) => {
           if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
@@ -393,7 +398,7 @@
 
     const tip = makeInputTip(target, "翻译中…", "loading");
 
-    translateRemote(text, inputTargetLang)
+    translateRemote(text, { targetLang: inputTargetLang, sourceLang: inputSourceLang })
       .then((result) => {
         const out = (result.text || "").trim();
         if (!out || out === text) {
@@ -493,7 +498,7 @@
   function fetchSelectionTranslation(bubble, text, rect, fallbackXY) {
     const wantDict = isSingleWord(text);
     console.log("[ITL dict] req", { text, length: text.length, wantDict, provider });
-    translateRemote(text, null, wantDict)
+    translateRemote(text, { wantDict })
       .then((result) => {
         console.log("[ITL dict] resp", { text: result.text, dict: result.dict });
         if (!bubble.isConnected) return;
@@ -657,12 +662,13 @@
     if (typeof p.observerEnabled === "boolean") observerEnabled = p.observerEnabled;
     if (typeof p.hoverKey === "string") hoverKey = p.hoverKey;
     if (typeof p.inputTranslate === "string") inputTranslate = p.inputTranslate;
+    if (typeof p.inputSourceLang === "string") inputSourceLang = p.inputSourceLang;
     if (typeof p.inputTargetLang === "string") inputTargetLang = p.inputTargetLang;
     if (typeof p.selectionTranslate === "string") selectionTranslate = p.selectionTranslate;
   }
 
   chrome.storage.sync.get(
-    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate", "inputTargetLang", "selectionTranslate"],
+    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate", "inputSourceLang", "inputTargetLang", "selectionTranslate"],
     (res) => {
       applyPrefs(res);
       refreshHoverListener();
@@ -683,6 +689,7 @@
       inputTranslate = changes.inputTranslate.newValue;
       refreshInputListener();
     }
+    if (changes.inputSourceLang) inputSourceLang = changes.inputSourceLang.newValue;
     if (changes.inputTargetLang) inputTargetLang = changes.inputTargetLang.newValue;
     if (changes.selectionTranslate) {
       selectionTranslate = changes.selectionTranslate.newValue;

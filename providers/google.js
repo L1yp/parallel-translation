@@ -7,13 +7,14 @@
 
 export async function translate(text, targetLang, config, options) {
   const wantDict = !!(options && options.wantDict);
+  const sourceLang = (options && options.sourceLang) || "auto";
   const dtParts = wantDict
     ? "&dt=t&dt=bd&dt=md&dt=ex"
     : "&dt=t";
 
   const url =
     "https://translate.googleapis.com/translate_a/single" +
-    "?client=gtx&sl=auto" +
+    "?client=gtx&sl=" + encodeURIComponent(sourceLang) +
     "&tl=" + encodeURIComponent(targetLang) +
     dtParts +
     "&q=" + encodeURIComponent(text);

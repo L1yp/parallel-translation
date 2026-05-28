@@ -8,6 +8,7 @@ const DEFAULTS = {
   style: "default",
   hoverKey: "alt",
   inputTranslate: "off",
+  inputSourceLang: "auto",
   inputTargetLang: "en",
   selectionTranslate: "off",
   observerEnabled: true,
@@ -26,6 +27,7 @@ const providerSel = $("provider");
 const styleSel = $("style");
 const hoverSel = $("hover");
 const inputTranslateSel = $("input-translate");
+const inputSourceLangSel = $("input-source-lang");
 const inputTargetLangSel = $("input-target-lang");
 const selectionTranslateSel = $("selection-translate");
 const observerChk = $("observer");
@@ -53,6 +55,7 @@ function readPrefs() {
     style: styleSel.value,
     hoverKey: hoverSel.value,
     inputTranslate: inputTranslateSel.value,
+    inputSourceLang: inputSourceLangSel.value,
     inputTargetLang: inputTargetLangSel.value,
     selectionTranslate: selectionTranslateSel.value,
     observerEnabled: observerChk.checked,
@@ -65,6 +68,7 @@ function applyPrefsToUI(prefs) {
   styleSel.value = prefs.style;
   hoverSel.value = prefs.hoverKey;
   inputTranslateSel.value = prefs.inputTranslate;
+  inputSourceLangSel.value = prefs.inputSourceLang;
   inputTargetLangSel.value = prefs.inputTargetLang;
   selectionTranslateSel.value = prefs.selectionTranslate;
   observerChk.checked = !!prefs.observerEnabled;
@@ -78,7 +82,7 @@ chrome.storage.sync.get([...Object.keys(DEFAULTS), ...ALL_CRED_KEYS], (res) => {
 function persistOnChange() {
   chrome.storage.sync.set(readPrefs());
 }
-[langSel, styleSel, hoverSel, inputTranslateSel, inputTargetLangSel, selectionTranslateSel, observerChk].forEach((el) =>
+[langSel, styleSel, hoverSel, inputTranslateSel, inputSourceLangSel, inputTargetLangSel, selectionTranslateSel, observerChk].forEach((el) =>
   el.addEventListener("change", persistOnChange)
 );
 
