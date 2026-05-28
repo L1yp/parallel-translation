@@ -112,7 +112,7 @@ Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体�
 
 **有道 `from=auto` 不触发词典通路**：调 `/api` 时 from=auto 通常只返回 `translation` 不带 basic/web；wantDict 命中时按 `/\p{Script=Han}/u` 与 `/^[A-Za-z][A-Za-z'\-]+$/` 启发式锁 from 为 `zh-CHS` / `en`，调用方无感知。
 
-**音频播放在 content.js 用 `new Audio(url).play()`**：受**页面 CSP 的 media-src** 影响（不受 host_permissions），少数严控站点可能拦。失败时 `console.warn`，不打扰用户。manifest 的 host_permissions 必须包含两个 TTS 域：`translate.googleapis.com` 与 `openapi.youdao.com`。
+**音频播放走 background 代理**：Google `translate_tts` 拒绝带第三方页面 Referer 的请求（用户在 github.com 选词触发时浏览器自动带 referer=github，被 Google 当爬虫挡了）；`<audio>` 元素又没有 `referrerPolicy` 属性可以控制。所以 content.js `playAudio` 发 `{type: "audio", url}` 给 background，background fetch 时 `referrerPolicy: "no-referrer"` 拿到音频字节，转 base64 data URL 回传，content.js 用 `new Audio(dataUrl).play()` 本地解码。这一并绕过页面 CSP `media-src` 限制。失败时 fallback 直接 `new Audio(url)` 试一次。manifest 的 host_permissions 必须包含 TTS 域：`translate.googleapis.com` / `openapi.youdao.com`。
 
 ## 译文样式预设
 

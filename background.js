@@ -12,7 +12,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
     return true; // 异步响应，必须返回 true
   }
+  if (msg.type === "audio") {
+    fetchAudioAsDataUrl(msg.url)
+      .then((dataUrl) => sendResponse({ ok: true, dataUrl }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
 });
+
+// 由 content.js 委托 fetch 发音 URL：
+// - Google translate_tts 拒绝带 Referer 的第三方页面请求（用户从 github.com 触发时 referer=github）
+// - 转成 data URL 让浏览器本地解码，绕开所有 origin / Referer / 页面 CSP media-src 限制
+async function fetchAudioAsDataUrl(url) {
+  const res = await fetch(url, { referrerPolicy: "no-referrer", credentials: "omit" });
+  if (!res.ok) throw new Error("audio HTTP " + res.status);
+  const buf = await res.arrayBuffer();
+  if (!buf.byteLength) throw new Error("audio empty body");
+  // ArrayBuffer → base64（分块避免 String.fromCharCode 参数过多）
+  const u8 = new Uint8Array(buf);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+  }
+  const mime = res.headers.get("Content-Type") || "audio/mpeg";
+  return "data:" + mime + ";base64," + btoa(bin);
+}
 
 async function handleTranslate(msg) {
   const provider = msg.provider || DEFAULT_PROVIDER;

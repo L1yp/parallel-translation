@@ -615,13 +615,30 @@
     return btn;
   }
 
-  // <audio> 的 src 加载受页面 CSP 的 media-src 影响；大多数页面不限，少数会拦
+  // 走 background 代理：Google translate_tts 会拒绝带第三方页面 Referer 的 <audio> 请求，
+  // 把音频 fetch 放到 SW，转 base64 data URL 后本地解码，绕过所有 origin / Referer / 页面 CSP 限制。
   function playAudio(url) {
+    chrome.runtime.sendMessage({ type: "audio", url }, (resp) => {
+      if (chrome.runtime.lastError) {
+        console.warn("[ITL] audio msg err:", chrome.runtime.lastError.message);
+        playDirect(url);
+        return;
+      }
+      if (resp && resp.ok && resp.dataUrl) {
+        new Audio(resp.dataUrl).play().catch((err) => console.warn("[ITL] audio play failed:", err));
+      } else {
+        console.warn("[ITL] audio proxy failed:", resp && resp.error);
+        playDirect(url);
+      }
+    });
+  }
+
+  // fallback：极端情况下 background 代理失败时直接试一下，受页面 CSP 限制可能也会失败
+  function playDirect(url) {
     try {
-      const a = new Audio(url);
-      a.play().catch((err) => console.warn("[ITL] audio play failed:", err));
+      new Audio(url).play().catch((err) => console.warn("[ITL] direct audio play failed:", err));
     } catch (e) {
-      console.warn("[ITL] audio init failed:", e);
+      console.warn("[ITL] direct audio init failed:", e);
     }
   }
 
