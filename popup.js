@@ -91,11 +91,19 @@ providerSel.addEventListener("change", () => {
   chrome.storage.sync.get(ALL_CRED_KEYS, (res) => refreshCredTip(res));
 });
 
-// 用户在设置页填了凭证后，回 popup 应立刻消失提示
+// 用户在设置页填了凭证或改了偏好后，popup 同步反映，避免显示陈旧值
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync") return;
-  if (!ALL_CRED_KEYS.some((k) => k in changes)) return;
-  chrome.storage.sync.get(ALL_CRED_KEYS, (res) => refreshCredTip(res));
+  const prefKeys = new Set(Object.keys(DEFAULTS));
+  const changedPrefs = Object.keys(changes).filter((k) => prefKeys.has(k));
+  if (changedPrefs.length) {
+    const next = {};
+    for (const k of changedPrefs) next[k] = changes[k].newValue;
+    applyPrefsToUI({ ...readPrefs(), ...next });
+  }
+  if (ALL_CRED_KEYS.some((k) => k in changes)) {
+    chrome.storage.sync.get(ALL_CRED_KEYS, (res) => refreshCredTip(res));
+  }
 });
 
 function openOptions(e) {

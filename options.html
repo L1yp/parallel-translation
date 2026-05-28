@@ -8,7 +8,7 @@
         color-scheme: light;
       }
       body {
-        max-width: 560px;
+        max-width: 640px;
         margin: 0 auto;
         padding: 28px 32px 48px;
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -47,6 +47,7 @@
         display: block;
         margin-bottom: 4px;
       }
+      select,
       input[type="text"],
       input[type="password"] {
         width: 100%;
@@ -59,10 +60,28 @@
         box-sizing: border-box;
         font-family: inherit;
       }
+      select:focus,
       input:focus {
         outline: none;
         border-color: #2563eb;
         box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+      }
+      .row-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 14px;
+      }
+      .row-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #374151;
+        margin: 0;
+        padding: 4px 0;
+      }
+      .row-check input {
+        margin: 0;
       }
       button {
         padding: 8px 14px;
@@ -75,6 +94,20 @@
       }
       button:hover {
         background: #e5e7eb;
+      }
+      button.danger {
+        color: #b91c1c;
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+      button.danger:hover {
+        background: #fee2e2;
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
       }
       .test-status {
         font-size: 12px;
@@ -99,6 +132,41 @@
       .saved-hint.show {
         color: #16a34a;
       }
+      .stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+      .stats .stat {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .stats .stat-label {
+        font-size: 11px;
+        color: #6b7280;
+        margin-bottom: 4px;
+      }
+      .stats .stat-value {
+        font-size: 14px;
+        color: #1f2937;
+        font-variant-numeric: tabular-nums;
+      }
+      .cache-status {
+        font-size: 12px;
+        color: #6b7280;
+        line-height: 1.5;
+        margin-top: 8px;
+        min-height: 16px;
+      }
+      .cache-status.ok {
+        color: #16a34a;
+      }
+      .cache-status.err {
+        color: #dc2626;
+      }
       a {
         color: #2563eb;
         text-decoration: none;
@@ -117,7 +185,119 @@
   </head>
   <body>
     <h1>沉浸式翻译 Lite — 设置</h1>
-    <p class="subtitle">所有改动会自动保存。</p>
+    <p class="subtitle">所有改动会自动保存；与扩展弹窗共享同一份偏好。</p>
+
+    <div class="card">
+      <h2>基础翻译</h2>
+      <p class="desc">整页翻译的目标语言、使用的翻译服务、双语对照样式与动态内容支持。</p>
+
+      <div class="row-grid">
+        <div>
+          <label for="target-lang">目标语言</label>
+          <select id="target-lang">
+            <option value="zh-CN">中文（简体）</option>
+            <option value="zh-TW">中文（繁体）</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+        <div>
+          <label for="provider">翻译服务</label>
+          <select id="provider">
+            <option value="google">Google（免费）</option>
+            <option value="microsoft">Microsoft Translator</option>
+            <option value="youdao">有道智云</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="style">译文样式</label>
+      <select id="style">
+        <option value="default">默认（蓝色虚线）</option>
+        <option value="underline">下划线</option>
+        <option value="blur">模糊（悬停显示）</option>
+        <option value="bold">加粗</option>
+        <option value="card">卡片</option>
+      </select>
+
+      <label class="row-check">
+        <input type="checkbox" id="observer" />
+        自动翻译动态加载的内容（SPA / 无限滚动）
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>悬停翻译</h2>
+      <p class="desc">不开整页翻译时，按住修饰键 + 悬停段落即时翻译单段。</p>
+
+      <label for="hover-key">触发方式</label>
+      <select id="hover-key">
+        <option value="off">关闭</option>
+        <option value="alt">按住 Alt + 悬停</option>
+        <option value="ctrl">按住 Ctrl + 悬停</option>
+        <option value="shift">按住 Shift + 悬停</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>划词翻译</h2>
+      <p class="desc">选中文本后弹出气泡显示译文；命中单词时显示词典释义。</p>
+
+      <label for="selection-translate">触发方式</label>
+      <select id="selection-translate">
+        <option value="off">关闭</option>
+        <option value="button">选中后显示翻译按钮</option>
+        <option value="auto">选中即自动翻译</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>输入框翻译</h2>
+      <p class="desc">
+        在 <code>&lt;textarea&gt;</code> / <code>&lt;input&gt;</code> / contenteditable
+        中连按多次空格触发翻译，按"源语言 → 目标语言"方向替换。中文输入法的空格选词不会被拦截。
+      </p>
+
+      <label for="input-translate">触发方式</label>
+      <select id="input-translate">
+        <option value="off">关闭</option>
+        <option value="space3">连按 3 次空格触发</option>
+      </select>
+
+      <div class="row-grid">
+        <div>
+          <label for="input-source-lang">源语言</label>
+          <select id="input-source-lang">
+            <option value="auto">自动检测</option>
+            <option value="zh-CN">中文（简体）</option>
+            <option value="zh-TW">中文（繁体）</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+        <div>
+          <label for="input-target-lang">目标语言</label>
+          <select id="input-target-lang">
+            <option value="en">English</option>
+            <option value="zh-CN">中文（简体）</option>
+            <option value="zh-TW">中文（繁体）</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <h2>Microsoft Translator</h2>
@@ -155,11 +335,41 @@
       <div id="yd-test-status" class="test-status"></div>
     </div>
 
+    <div class="card">
+      <h2>本地缓存</h2>
+      <p class="desc">
+        相同段落短期内重复翻译命中缓存，省流量、扛限流。TTL 7 天，容量上限 5000 条，
+        超出按时间淘汰最旧的。key 包含翻译服务、源/目标语言、词典模式，互不污染。
+      </p>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">缓存条目</div>
+          <div class="stat-value" id="cache-count">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">最早记录</div>
+          <div class="stat-value" id="cache-oldest">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">最新记录</div>
+          <div class="stat-value" id="cache-newest">—</div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button id="cache-refresh">刷新统计</button>
+        <button id="cache-cleanup">清理过期</button>
+        <button id="cache-clear" class="danger">清空全部</button>
+      </div>
+      <div id="cache-status" class="cache-status"></div>
+    </div>
+
     <div id="saved-hint" class="saved-hint"></div>
 
     <p class="footer">
-      切换翻译服务、目标语言、译文样式等常用选项请打开扩展弹窗。<br />
-      快捷键 Alt+T 也能开关整页翻译。
+      偏好与凭证均同步到 <code>chrome.storage.sync</code>，跨设备共享；缓存仅本地存储。<br />
+      快捷键 Alt+T 可开关整页翻译。
     </p>
 
     <script src="options.js"></script>

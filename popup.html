@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <style>
       body {
-        width: 280px;
+        width: 300px;
         margin: 0;
-        padding: 16px;
+        padding: 14px 16px 16px;
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
         color: #1f2937;
       }
@@ -28,10 +28,15 @@
         font-size: 13px;
         border: 1px solid #d1d5db;
         border-radius: 6px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         background: #fff;
         box-sizing: border-box;
         font-family: inherit;
+      }
+      .row-2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 8px;
       }
       .row-check {
         display: flex;
@@ -39,7 +44,7 @@
         gap: 6px;
         font-size: 12px;
         color: #374151;
-        margin: 0 0 14px;
+        margin: 0 0 10px;
       }
       .row-check input {
         margin: 0;
@@ -57,16 +62,18 @@
       button:hover {
         background: #1d4ed8;
       }
-      .hint {
-        font-size: 11px;
-        color: #9ca3af;
-        margin-top: 10px;
-        line-height: 1.5;
-      }
-      .section {
+      .group {
         border-top: 1px solid #e5e7eb;
-        margin-top: 14px;
-        padding-top: 12px;
+        margin-top: 12px;
+        padding-top: 10px;
+      }
+      .group-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 8px;
       }
       .cred-tip {
         display: none;
@@ -76,7 +83,7 @@
         border: 1px solid #fde68a;
         border-radius: 6px;
         padding: 6px 8px;
-        margin: -6px 0 12px;
+        margin: 0 0 10px;
         line-height: 1.5;
       }
       .cred-tip.show {
@@ -117,30 +124,37 @@
   <body>
     <h1>沉浸式翻译 Lite</h1>
 
-    <label for="lang">目标语言</label>
-    <select id="lang">
-      <option value="zh-CN">中文（简体）</option>
-      <option value="zh-TW">中文（繁体）</option>
-      <option value="en">English</option>
-      <option value="ja">日本語</option>
-      <option value="ko">한국어</option>
-      <option value="fr">Français</option>
-      <option value="de">Deutsch</option>
-      <option value="es">Español</option>
-    </select>
+    <div class="group" style="border-top: none; margin-top: 0; padding-top: 0;">
+      <h2 class="group-title">基础翻译</h2>
 
-    <label for="provider">翻译服务</label>
-    <select id="provider">
-      <option value="google">Google（免费）</option>
-      <option value="microsoft">Microsoft Translator</option>
-      <option value="youdao">有道智云</option>
-    </select>
+      <div class="row-2col">
+        <div>
+          <label for="lang">目标语言</label>
+          <select id="lang">
+            <option value="zh-CN">中文（简体）</option>
+            <option value="zh-TW">中文（繁体）</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+        <div>
+          <label for="provider">翻译服务</label>
+          <select id="provider">
+            <option value="google">Google</option>
+            <option value="microsoft">Microsoft</option>
+            <option value="youdao">有道</option>
+          </select>
+        </div>
+      </div>
 
-    <div id="cred-tip" class="cred-tip">
-      未配置 <span id="cred-tip-what"></span>，<a id="cred-tip-link">前往设置</a>。
-    </div>
+      <div id="cred-tip" class="cred-tip">
+        未配置 <span id="cred-tip-what"></span>，<a id="cred-tip-link">前往设置</a>。
+      </div>
 
-    <div class="section">
       <label for="style">译文样式</label>
       <select id="style">
         <option value="default">默认（蓝色虚线）</option>
@@ -150,62 +164,79 @@
         <option value="card">卡片</option>
       </select>
 
-      <label for="hover">悬停翻译</label>
-      <select id="hover">
-        <option value="off">关闭</option>
-        <option value="alt">按住 Alt + 悬停</option>
-        <option value="ctrl">按住 Ctrl + 悬停</option>
-        <option value="shift">按住 Shift + 悬停</option>
-      </select>
-
-      <label for="input-translate">输入框翻译</label>
-      <select id="input-translate">
-        <option value="off">关闭</option>
-        <option value="space3">连按 3 次空格触发</option>
-      </select>
-
-      <label for="input-source-lang">输入框翻译 · 源语言</label>
-      <select id="input-source-lang">
-        <option value="auto">自动检测</option>
-        <option value="zh-CN">中文（简体）</option>
-        <option value="zh-TW">中文（繁体）</option>
-        <option value="en">English</option>
-        <option value="ja">日本語</option>
-        <option value="ko">한국어</option>
-        <option value="fr">Français</option>
-        <option value="de">Deutsch</option>
-        <option value="es">Español</option>
-      </select>
-
-      <label for="input-target-lang">输入框翻译 · 目标语言</label>
-      <select id="input-target-lang">
-        <option value="en">English</option>
-        <option value="zh-CN">中文（简体）</option>
-        <option value="zh-TW">中文（繁体）</option>
-        <option value="ja">日本語</option>
-        <option value="ko">한국어</option>
-        <option value="fr">Français</option>
-        <option value="de">Deutsch</option>
-        <option value="es">Español</option>
-      </select>
-
-      <label for="selection-translate">划词翻译</label>
-      <select id="selection-translate">
-        <option value="off">关闭</option>
-        <option value="button">选中后显示翻译按钮</option>
-        <option value="auto">选中即自动翻译</option>
-      </select>
-
       <label class="row-check">
         <input type="checkbox" id="observer" />
         自动翻译动态加载的内容
       </label>
     </div>
 
-    <button id="go">翻译 / 还原</button>
-    <div class="footer-bar">
-      <span>快捷键 <kbd>Alt</kbd>+<kbd>T</kbd> 切换</span>
-      <a id="open-options">⚙ 设置</a>
+    <div class="group">
+      <h2 class="group-title">悬停翻译</h2>
+      <label for="hover">触发方式</label>
+      <select id="hover">
+        <option value="off">关闭</option>
+        <option value="alt">按住 Alt + 悬停</option>
+        <option value="ctrl">按住 Ctrl + 悬停</option>
+        <option value="shift">按住 Shift + 悬停</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <h2 class="group-title">划词翻译</h2>
+      <label for="selection-translate">触发方式</label>
+      <select id="selection-translate">
+        <option value="off">关闭</option>
+        <option value="button">选中后显示翻译按钮</option>
+        <option value="auto">选中即自动翻译</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <h2 class="group-title">输入框翻译</h2>
+
+      <label for="input-translate">触发方式</label>
+      <select id="input-translate">
+        <option value="off">关闭</option>
+        <option value="space3">连按 3 次空格触发</option>
+      </select>
+
+      <div class="row-2col">
+        <div>
+          <label for="input-source-lang">源语言</label>
+          <select id="input-source-lang">
+            <option value="auto">自动检测</option>
+            <option value="zh-CN">中文（简体）</option>
+            <option value="zh-TW">中文（繁体）</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+        <div>
+          <label for="input-target-lang">目标语言</label>
+          <select id="input-target-lang">
+            <option value="en">English</option>
+            <option value="zh-CN">中文（简体）</option>
+            <option value="zh-TW">中文（繁体）</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <button id="go">翻译 / 还原</button>
+      <div class="footer-bar">
+        <span>快捷键 <kbd>Alt</kbd>+<kbd>T</kbd> 切换</span>
+        <a id="open-options">⚙ 更多设置</a>
+      </div>
     </div>
     <script src="popup.js"></script>
   </body>

@@ -12,10 +12,11 @@
 
 - **`manifest.json`** —— MV3 配置。声明权限（`activeTab` / `scripting` / `storage`）、host 权限（仅 `translate.googleapis.com`）、后台 Service Worker（`type: "module"`）、`<all_urls>` 上的内容脚本注入（`document_idle`）、`commands`（`Alt+T` 切换整页翻译）。
 - **`background.js`** —— Service Worker（ES module）。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。也监听 `chrome.commands.onCommand`，把快捷键转成 `toggle` 消息发给当前 tab。
-- **`cache.js`** —— Service Worker 内的 IndexedDB 翻译缓存层。`handleTranslate` 入口先 `cacheGet` 命中直接返回，未命中走 provider，成功 `cacheSet`。key = `sha1(provider + text + targetLang + sourceLang + wantDict)`，TTL 7 天，容量上限 5000 条，超出按 createdAt 升序淘汰。冷启动懒触发一次 cleanup（`maybeCleanupCache`，标志位防重）。缓存命中对所有 caller（页面/悬停/输入框/划词）透明，无需改 content 侧。**任何 IDB 错误都吞掉**，缓存层永远不能阻断翻译主流程。
+- **`cache.js`** —— Service Worker 内的 IndexedDB 翻译缓存层。`handleTranslate` 入口先 `cacheGet` 命中直接返回，未命中走 provider，成功 `cacheSet`。key = `sha1(provider + text + targetLang + sourceLang + wantDict)`，TTL 7 天，容量上限 5000 条，超出按 createdAt 升序淘汰。冷启动懒触发一次 cleanup（`maybeCleanupCache`，标志位防重）。缓存命中对所有 caller（页面/悬停/输入框/划词）透明，无需改 content 侧。**任何 IDB 错误都吞掉**，缓存层永远不能阻断翻译主流程。同时暴露 `cacheStats` / `cacheClearAll` / `cleanupCache` 给设置页缓存管理面板使用，对应 background 的 `cache-stats` / `cache-cleanup` / `cache-clear` 三条消息。
 - **`providers/`** —— 翻译服务实现。`providers/index.js` 提供 `translate(name, text, targetLang, config)` 路由，返回 `{text}`。当前两个 provider：`google.js`（免费）和 `microsoft.js`（Azure Translator）。**敏感配置（API Key 等）由 background 从 `chrome.storage.sync` 读取后注入 provider，永远不进 content.js 上下文**。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
 - **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译、输入框三击空格翻译、划词翻译气泡。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
-- **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、选输入框翻译触发方式、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。
+- **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、选输入框翻译触发方式、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。配置按"基础翻译 / 悬停翻译 / 划词翻译 / 输入框翻译"四组（`.group` + `.group-title`）聚合，便于视觉扫描。
+- **`options.html` / `options.js`** —— 独立设置页（`options_ui`，open_in_tab）。**镜像 popup 的全部偏好**（同步走 `chrome.storage.onChanged`，两边任一改动另一边立刻反映），按 4 组 card 分类排版，同时承载凭证（Microsoft / 有道）和**缓存管理**面板（条目数 / 最旧最新时间 / 刷新统计 / 清理过期 / 清空全部）。缓存操作走 `chrome.runtime.sendMessage` 委托给 background，不在设置页直开 IndexedDB，保持"IDB 持有者只有一个"。
 
 ### 关键消息流
 
@@ -152,7 +153,9 @@ Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体�
 | `providers/microsoft.js` | Microsoft Translator（Azure） |
 | `content.js` | DOM 遍历、并发调度、译文插入/清理、MutationObserver、悬停翻译、输入框三击空格翻译、划词翻译气泡 |
 | `content.css` | `.itl-translation` 译文块样式 + 5 种样式预设 |
-| `popup.html` | 弹窗 UI（含内联样式） |
-| `popup.js` | 弹窗交互、`chrome.storage.sync` 持久化 |
+| `popup.html` | 弹窗 UI（含内联样式），按"基础/悬停/划词/输入框"四组聚合 |
+| `popup.js` | 弹窗交互、`chrome.storage.sync` 持久化、监听 storage.onChanged 同步反映 options 改动 |
+| `options.html` | 设置页 UI：偏好镜像（4 组 card）+ 凭证 + 缓存管理面板 |
+| `options.js` | 设置页交互：偏好/凭证双向绑定、缓存统计/清理/清空走 `cache-*` 消息 |
 | `README.md` | 面向用户的安装与使用说明 |
 | `docs/roadmap.md` | 开发路线图（功能调研 + P0/P1/P2 优先级） |

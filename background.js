@@ -4,7 +4,15 @@
 // 永远不进入页面上下文，避免被网页脚本嗅探。
 
 import { translate, DEFAULT_PROVIDER } from "./providers/index.js";
-import { makeCacheKey, cacheGet, cacheSet, maybeCleanupCache } from "./cache.js";
+import {
+  makeCacheKey,
+  cacheGet,
+  cacheSet,
+  maybeCleanupCache,
+  cleanupCache,
+  cacheStats,
+  cacheClearAll,
+} from "./cache.js";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "translate") {
@@ -16,6 +24,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "audio") {
     fetchAudioAsDataUrl(msg.url)
       .then((dataUrl) => sendResponse({ ok: true, dataUrl }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "cache-stats") {
+    cacheStats()
+      .then((s) => sendResponse({ ok: true, ...s }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "cache-cleanup") {
+    cleanupCache()
+      .then(() => cacheStats())
+      .then((s) => sendResponse({ ok: true, ...s }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "cache-clear") {
+    cacheClearAll()
+      .then(() => sendResponse({ ok: true, count: 0, oldestAt: null, newestAt: null }))
       .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
     return true;
   }

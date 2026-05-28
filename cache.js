@@ -111,7 +111,7 @@ async function cacheDelete(key) {
 }
 
 // 删过期 + 超容截断。每次 SW 冷启动触发一次（标志位防重，SW 休眠重启会重置）。
-async function cleanupCache() {
+export async function cleanupCache() {
   try {
     const db = await openDb();
     const cutoff = Date.now() - TTL_MS;
@@ -163,4 +163,50 @@ export function maybeCleanupCache() {
   if (cleanupTriggered) return;
   cleanupTriggered = true;
   cleanupCache().catch(() => {});
+}
+
+// 给设置页缓存管理面板用：返回 { count, oldestAt, newestAt }（时间戳；空库时为 null）。
+export async function cacheStats() {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const store = tx.objectStore(STORE);
+      const idx = store.index("createdAt");
+      const result = { count: 0, oldestAt: null, newestAt: null };
+      const countReq = store.count();
+      countReq.onsuccess = () => {
+        result.count = countReq.result;
+      };
+      const firstReq = idx.openCursor();
+      firstReq.onsuccess = () => {
+        const cur = firstReq.result;
+        if (cur) result.oldestAt = cur.value.createdAt;
+      };
+      const lastReq = idx.openCursor(null, "prev");
+      lastReq.onsuccess = () => {
+        const cur = lastReq.result;
+        if (cur) result.newestAt = cur.value.createdAt;
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    return { count: 0, oldestAt: null, newestAt: null };
+  }
+}
+
+// 用户主动清空：删全部记录。失败也吞错（不能阻塞 UI）。
+export async function cacheClearAll() {
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    // 忽略
+  }
 }
