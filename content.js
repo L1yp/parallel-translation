@@ -84,6 +84,35 @@
     el.appendChild(node);
   }
 
+  // 悬停翻译的中间态：先插占位 + spinner，请求回来再替换内容
+  function appendLoading(el) {
+    const node = document.createElement("div");
+    node.className = "itl-translation itl-loading";
+    const cls = currentStyleClass();
+    if (cls) node.classList.add(cls);
+    node.textContent = "翻译中";
+    const dot = document.createElement("span");
+    dot.className = "itl-spinner";
+    node.appendChild(dot);
+    el.appendChild(node);
+    return node;
+  }
+
+  function finalizeLoading(node, tgtText) {
+    node.classList.remove("itl-loading");
+    node.textContent = tgtText;
+  }
+
+  function showLoadingError(node, err) {
+    node.classList.remove("itl-loading");
+    node.classList.add("itl-error");
+    const msg = (err && err.message) ? err.message : "未知错误";
+    node.textContent = "翻译失败：" + msg;
+    setTimeout(() => {
+      if (node.isConnected) node.remove();
+    }, 3000);
+  }
+
   // —— 并发队列 ——————————————————————————————————————————————
 
   const queue = [];
@@ -197,14 +226,25 @@
     block.setAttribute(PROCESSED, "1");
     const text = (block.innerText || "").trim();
     if (text.length < 2) return;
+
+    const placeholder = appendLoading(block);
+
     translateRemote(text)
       .then((translated) => {
         const out = (translated || "").trim();
         if (out && out !== text) {
-          appendTranslation(block, translated);
+          finalizeLoading(placeholder, translated);
+        } else {
+          placeholder.remove();
         }
       })
-      .catch((err) => console.warn("[ITL hover] 翻译失败：", err));
+      .catch((err) => {
+        console.warn("[ITL hover] 翻译失败：", err);
+        showLoadingError(placeholder, err);
+        // 失败后允许用户再次悬停重试
+        block.removeAttribute(PROCESSED);
+        if (lastHoverEl === block) lastHoverEl = null;
+      });
   }
 
   let hoverListenerAttached = false;
