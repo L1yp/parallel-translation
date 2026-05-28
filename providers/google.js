@@ -1,6 +1,5 @@
 // providers/google.js —— Google 免费翻译接口（非官方）
 // 该接口随时可能失效或限流，调用方应捕获异常并降级。
-// 不返回 alignment，因此调用方在 google provider 下不做词级高亮。
 
 export async function translate(text, targetLang /*, config */) {
   // client=gtx, sl=auto 自动识别源语言, dt=t 取译文

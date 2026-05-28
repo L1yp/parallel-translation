@@ -1,6 +1,6 @@
 # 沉浸式翻译 Lite
 
-一个双语对照的 Chrome 翻译插件：原文在上，译文在下。支持 Google（免费）和 Microsoft Translator（带词对齐高亮）。
+一个双语对照的 Chrome 翻译插件：原文在上，译文在下。支持 Google（免费）和 Microsoft Translator。
 
 ## 安装（加载未打包扩展）
 
@@ -21,13 +21,13 @@
 
 - **目标语言** —— 中/英/日/韩/法/德/西 等
 - **翻译服务**
-  - **Google**（默认）：免费、无需配置，但**不支持词对齐高亮**
-  - **Microsoft**：注册 Azure Translator 免费层（F0，每月 2M 字符），填 Key + Region，翻译时返回字符级对齐，**鼠标悬停原文/译文中的词会联动高亮另一侧的对应词**
+  - **Google**（默认）：免费、无需配置
+  - **Microsoft**：注册 Azure Translator 免费层（F0，每月 2M 字符），填 Key + Region 即可使用
 - **译文样式** —— 默认（蓝色虚线）/ 下划线 / 模糊（悬停显示）/ 加粗 / 卡片
 - **悬停翻译** —— 选 `Alt` / `Ctrl` / `Shift`，按住对应键 + 鼠标悬停在段落上即可单段翻译。选「关闭」彻底拆除监听。
 - **自动翻译动态加载的内容** —— 默认开启，监听 SPA / 无限滚动新增的段落。Twitter/Reddit 触发限流可关。
 
-### 注册 Microsoft Translator（可选，启用对齐高亮）
+### 注册 Microsoft Translator（可选）
 
 1. 去 https://portal.azure.com 注册 Azure 账号（需信用卡验证，免费层不扣费）
 2. 直接打开 https://portal.azure.com/#create/Microsoft.CognitiveServicesTextTranslation
@@ -35,19 +35,13 @@
 4. 创建完成后进资源页 → 左侧"密钥和终结点" → 复制 Key 和 Region
 5. 在本扩展 popup 选「Microsoft」，填入 Key 和 Region，点"测试连接"验证
 
-### 词对齐高亮的限制
-
-- 仅 Microsoft provider 支持
-- 含内嵌格式（`<strong>`/`<a>` 等）的段落，**只在译文侧切 span**，原文不动 DOM；纯文本段落则双向都切。
-- Microsoft 返回的是机器翻译的对齐，对长句、意译、惯用语的对齐质量会下降。
-
 ## 文件说明
 
 - `manifest.json` —— 扩展配置（Manifest V3）
 - `background.js` —— 后台 Service Worker，唯一的翻译 fetch 入口，转发快捷键，注入敏感配置
 - `providers/` —— 翻译服务实现（`google.js` / `microsoft.js`）+ 路由
-- `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译 / 词对齐高亮
-- `content.css` —— 译文块样式与样式预设 + token 高亮
+- `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译
+- `content.css` —— 译文块样式与样式预设
 - `popup.html` / `popup.js` —— 弹窗界面与交互
 
 ## 隐私 / 安全
@@ -59,4 +53,4 @@
 ## 注意事项
 
 - Google 走的是 `translate.googleapis.com` 的**非官方免费接口**，可能限流或随时失效，仅适合个人学习使用。
-- 接入其他翻译服务（DeepL / OpenAI 兼容端点 / Ollama 等）只需在 `providers/` 下新增一个文件，实现 `translate(text, targetLang, config) -> {text, alignment?}`，并在 `providers/index.js` 注册。
+- 接入其他翻译服务（DeepL / OpenAI 兼容端点 / Ollama 等）只需在 `providers/` 下新增一个文件，实现 `translate(text, targetLang, config) -> {text}`，并在 `providers/index.js` 注册。

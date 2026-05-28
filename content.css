@@ -46,15 +46,3 @@
   border-left: 3px solid rgba(37, 99, 235, 0.6);
   border-radius: 4px;
 }
-
-/* —— 词对齐 token —— */
-/* 默认无样式，仅作 hover 锚点；hover 时联动高亮原文-译文同 group 的 spans。 */
-.itl-tok {
-  /* 留出微小 padding 让高亮背景不挤压字 */
-  border-radius: 2px;
-  transition: background-color 0.08s ease;
-}
-.itl-tok-active {
-  background-color: rgba(250, 204, 21, 0.45);
-  box-shadow: 0 0 0 1px rgba(202, 138, 4, 0.5);
-}

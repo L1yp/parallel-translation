@@ -90,10 +90,7 @@ msTestBtn.addEventListener("click", async () => {
           return;
         }
         if (resp && resp.ok) {
-          const alignNote = resp.alignment && resp.alignment.length
-            ? `（含 ${resp.alignment.length} 个对齐段）`
-            : "（未返回 alignment）";
-          msTestStatus.textContent = `✓ ${resp.translated} ${alignNote}`;
+          msTestStatus.textContent = `✓ ${resp.translated}`;
           msTestStatus.className = "test-status ok";
         } else {
           msTestStatus.textContent = "失败：" + (resp && resp.error || "未知错误");
