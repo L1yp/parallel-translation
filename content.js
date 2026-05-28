@@ -19,6 +19,7 @@
   let observerEnabled = true;
   let hoverKey = "alt"; // alt | ctrl | shift | off
   let inputTranslate = "off"; // off | space3
+  let inputTargetLang = "en"; // 输入框翻译的目标语言（默认 en：用户写中文 → 英文）
   let selectionTranslate = "off"; // off | button | auto
 
   // 作为"翻译单元"的块级元素。选叶子节点，避免父子重复翻译。
@@ -52,10 +53,10 @@
     return all.filter(isLeafBlock);
   }
 
-  function translateRemote(text) {
+  function translateRemote(text, overrideTargetLang) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { type: "translate", text, targetLang, provider },
+        { type: "translate", text, targetLang: overrideTargetLang || targetLang, provider },
         (resp) => {
           if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
           if (resp && resp.ok) resolve(resp.translated);
@@ -385,7 +386,7 @@
 
     const tip = makeInputTip(target, "翻译中…", "loading");
 
-    translateRemote(text)
+    translateRemote(text, inputTargetLang)
       .then((translated) => {
         const out = (translated || "").trim();
         if (!out || out === text) {
@@ -571,11 +572,12 @@
     if (typeof p.observerEnabled === "boolean") observerEnabled = p.observerEnabled;
     if (typeof p.hoverKey === "string") hoverKey = p.hoverKey;
     if (typeof p.inputTranslate === "string") inputTranslate = p.inputTranslate;
+    if (typeof p.inputTargetLang === "string") inputTargetLang = p.inputTargetLang;
     if (typeof p.selectionTranslate === "string") selectionTranslate = p.selectionTranslate;
   }
 
   chrome.storage.sync.get(
-    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate", "selectionTranslate"],
+    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate", "inputTargetLang", "selectionTranslate"],
     (res) => {
       applyPrefs(res);
       refreshHoverListener();
@@ -596,6 +598,7 @@
       inputTranslate = changes.inputTranslate.newValue;
       refreshInputListener();
     }
+    if (changes.inputTargetLang) inputTargetLang = changes.inputTargetLang.newValue;
     if (changes.selectionTranslate) {
       selectionTranslate = changes.selectionTranslate.newValue;
       refreshSelectionListener();

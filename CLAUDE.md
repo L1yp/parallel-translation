@@ -59,6 +59,8 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 
 `inputTranslate` ∈ `{off, space3}`，默认 `off`（会改变原生输入行为，opt-in 更安全）。开启后：document 级 `keydown`（capture）监听，连按 3 次空格（间隔 ≤ 700ms）触发；第 3 次按键 `preventDefault()` 拦掉，前两个已落键的空格在取文本时用 `replace(/ {1,2}$/, "")` 剥掉。
 
+**目标语言独立于页面翻译**：用单独的 `inputTargetLang` 字段（默认 `en`），不复用 `targetLang`。因为页面翻译是「外文 → 我读的语言」（zh-CN），输入框翻译方向相反：用户用熟悉的语言输入、想翻成不熟悉的语言发出去。`translateRemote(text, overrideTargetLang)` 接受可选第二参数，`handleInputTranslate` 显式传 `inputTargetLang`。
+
 支持的元素：
 
 - `<textarea>`、`<input>`（type ∈ `text/search/email/url/tel`）：使用 `HTMLInputElement.prototype` / `HTMLTextAreaElement.prototype` 上的原生 `value` setter 写回，并 dispatch `input` 事件 —— 否则 React / Vue 等框架因虚拟 DOM 短路检测不到值变化。
