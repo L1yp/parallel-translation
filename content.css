@@ -102,3 +102,42 @@
 .itl-input-tip.itl-input-tip-fade {
   opacity: 0;
 }
+
+/* —— 划词翻译气泡 —— */
+.itl-selection-bubble {
+  position: fixed;
+  background: rgba(31, 41, 55, 0.95);
+  color: #f9fafb;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 8px 12px;
+  border-radius: 6px;
+  z-index: 2147483647;
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  max-width: 360px;
+  word-break: break-word;
+  white-space: normal;
+  user-select: none;
+  animation: itl-bubble-in 0.15s ease;
+}
+@keyframes itl-bubble-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.itl-selection-bubble.itl-selection-button {
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #2563eb;
+}
+.itl-selection-bubble.itl-selection-button:hover {
+  background: #1d4ed8;
+}
+.itl-selection-bubble.itl-selection-loading {
+  color: #d1d5db;
+  font-style: italic;
+}
+.itl-selection-bubble.itl-selection-error {
+  background: rgba(185, 28, 28, 0.95);
+}

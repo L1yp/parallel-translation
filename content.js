@@ -1,5 +1,5 @@
 // content.js —— 注入到网页中的核心逻辑
-// 职责：DOM 遍历 / 可见性过滤 / 并发调度 / 译文插入 / 动态内容监听 / 悬停翻译 / 输入框三击空格翻译。
+// 职责：DOM 遍历 / 可见性过滤 / 并发调度 / 译文插入 / 动态内容监听 / 悬停翻译 / 输入框三击空格翻译 / 划词翻译气泡。
 // 所有 DOM 操作集中在此，背景脚本只负责 fetch 与敏感配置注入。
 
 (function () {
@@ -19,6 +19,7 @@
   let observerEnabled = true;
   let hoverKey = "alt"; // alt | ctrl | shift | off
   let inputTranslate = "off"; // off | space3
+  let selectionTranslate = "off"; // off | button | auto
 
   // 作为"翻译单元"的块级元素。选叶子节点，避免父子重复翻译。
   const BLOCK_SELECTOR =
@@ -417,6 +418,149 @@
     }
   }
 
+  // —— 划词翻译气泡 ——————————————————————————————————————————
+
+  let selectionBubble = null;
+
+  // 从事件路径里找有效 selection：先 Shadow Root（GitHub 评论框等），再顶层 document
+  function readSelection(e) {
+    const trySel = (sel) => {
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+      const text = (sel.toString() || "").trim();
+      if (!text) return null;
+      let rect = null;
+      try { rect = sel.getRangeAt(0).getBoundingClientRect(); } catch (_) {}
+      return { text, rect };
+    };
+    if (e && typeof e.composedPath === "function") {
+      for (const node of e.composedPath()) {
+        if (node instanceof ShadowRoot && typeof node.getSelection === "function") {
+          const r = trySel(node.getSelection());
+          if (r) return r;
+        }
+      }
+    }
+    return trySel(window.getSelection());
+  }
+
+  function inOwnBubble(target) {
+    return !!(target && target.closest && target.closest(".itl-selection-bubble"));
+  }
+
+  function hideSelectionBubble() {
+    if (selectionBubble && selectionBubble.isConnected) selectionBubble.remove();
+    selectionBubble = null;
+  }
+
+  function positionSelectionBubble(bubble, rect, fallbackXY) {
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      if (!fallbackXY) return;
+      rect = { left: fallbackXY.x, top: fallbackXY.y, right: fallbackXY.x, bottom: fallbackXY.y, width: 0, height: 0 };
+    }
+    const margin = 6;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // 让浏览器先按内容宽度量一遍
+    bubble.style.left = "0px";
+    bubble.style.top = "0px";
+    const bw = bubble.offsetWidth;
+    const bh = bubble.offsetHeight;
+    let left = rect.left + rect.width / 2 - bw / 2;
+    let top = rect.top - bh - margin;
+    if (top < 4) top = rect.bottom + margin; // 上方放不下就放下方
+    left = Math.max(4, Math.min(left, vw - bw - 4));
+    top = Math.max(4, Math.min(top, vh - bh - 4));
+    bubble.style.left = Math.round(left) + "px";
+    bubble.style.top = Math.round(top) + "px";
+  }
+
+  function fetchSelectionTranslation(bubble, text, rect, fallbackXY) {
+    translateRemote(text)
+      .then((translated) => {
+        if (!bubble.isConnected) return;
+        bubble.classList.remove("itl-selection-loading");
+        bubble.classList.add("itl-selection-done");
+        const out = (translated || "").trim();
+        bubble.textContent = out || "（无内容）";
+        positionSelectionBubble(bubble, rect, fallbackXY);
+      })
+      .catch((err) => {
+        if (!bubble.isConnected) return;
+        bubble.classList.remove("itl-selection-loading");
+        bubble.classList.add("itl-selection-error");
+        const msg = (err && err.message) ? err.message : "未知错误";
+        bubble.textContent = "翻译失败：" + msg;
+        positionSelectionBubble(bubble, rect, fallbackXY);
+      });
+  }
+
+  function showSelectionBubble(info, e) {
+    hideSelectionBubble();
+    const bubble = document.createElement("div");
+    bubble.className = "itl-selection-bubble";
+    document.body.appendChild(bubble);
+    selectionBubble = bubble;
+
+    const fallbackXY = e ? { x: e.clientX, y: e.clientY } : null;
+
+    if (selectionTranslate === "button") {
+      bubble.classList.add("itl-selection-button");
+      bubble.textContent = "翻译";
+      positionSelectionBubble(bubble, info.rect, fallbackXY);
+      bubble.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        bubble.classList.remove("itl-selection-button");
+        bubble.classList.add("itl-selection-loading");
+        bubble.textContent = "翻译中…";
+        positionSelectionBubble(bubble, info.rect, fallbackXY);
+        fetchSelectionTranslation(bubble, info.text, info.rect, fallbackXY);
+      }, { once: true });
+    } else {
+      bubble.classList.add("itl-selection-loading");
+      bubble.textContent = "翻译中…";
+      positionSelectionBubble(bubble, info.rect, fallbackXY);
+      fetchSelectionTranslation(bubble, info.text, info.rect, fallbackXY);
+    }
+  }
+
+  function onSelectionMouseDown(e) {
+    if (inOwnBubble(e.target)) return;
+    hideSelectionBubble();
+  }
+
+  function onSelectionMouseUp(e) {
+    if (selectionTranslate === "off") return;
+    if (inOwnBubble(e.target)) return;
+    // 让浏览器把 selection 落定后再读
+    setTimeout(() => {
+      const info = readSelection(e);
+      if (!info || info.text.length < 2) return;
+      showSelectionBubble(info, e);
+    }, 0);
+  }
+
+  function onSelectionKeyDown(e) {
+    if (e.key === "Escape" && selectionBubble) hideSelectionBubble();
+  }
+
+  let selectionListenerAttached = false;
+  function refreshSelectionListener() {
+    const want = selectionTranslate !== "off";
+    if (want && !selectionListenerAttached) {
+      document.addEventListener("mousedown", onSelectionMouseDown, true);
+      document.addEventListener("mouseup", onSelectionMouseUp, true);
+      document.addEventListener("keydown", onSelectionKeyDown, true);
+      selectionListenerAttached = true;
+    } else if (!want && selectionListenerAttached) {
+      document.removeEventListener("mousedown", onSelectionMouseDown, true);
+      document.removeEventListener("mouseup", onSelectionMouseUp, true);
+      document.removeEventListener("keydown", onSelectionKeyDown, true);
+      selectionListenerAttached = false;
+      hideSelectionBubble();
+    }
+  }
+
   // —— 偏好读取 / 变更同步 ————————————————————————————————————
 
   function applyPrefs(p) {
@@ -427,14 +571,16 @@
     if (typeof p.observerEnabled === "boolean") observerEnabled = p.observerEnabled;
     if (typeof p.hoverKey === "string") hoverKey = p.hoverKey;
     if (typeof p.inputTranslate === "string") inputTranslate = p.inputTranslate;
+    if (typeof p.selectionTranslate === "string") selectionTranslate = p.selectionTranslate;
   }
 
   chrome.storage.sync.get(
-    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate"],
+    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate", "selectionTranslate"],
     (res) => {
       applyPrefs(res);
       refreshHoverListener();
       refreshInputListener();
+      refreshSelectionListener();
     }
   );
 
@@ -449,6 +595,10 @@
     if (changes.inputTranslate) {
       inputTranslate = changes.inputTranslate.newValue;
       refreshInputListener();
+    }
+    if (changes.selectionTranslate) {
+      selectionTranslate = changes.selectionTranslate.newValue;
+      refreshSelectionListener();
     }
     if (changes.style) {
       style = changes.style.newValue;
@@ -470,6 +620,7 @@
       applyPrefs(msg);
       refreshHoverListener();
       refreshInputListener();
+      refreshSelectionListener();
       if (isOn) {
         turnOff();
         sendResponse({ state: "off" });

@@ -13,7 +13,7 @@
 - **`manifest.json`** —— MV3 配置。声明权限（`activeTab` / `scripting` / `storage`）、host 权限（仅 `translate.googleapis.com`）、后台 Service Worker（`type: "module"`）、`<all_urls>` 上的内容脚本注入（`document_idle`）、`commands`（`Alt+T` 切换整页翻译）。
 - **`background.js`** —— Service Worker（ES module）。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。也监听 `chrome.commands.onCommand`，把快捷键转成 `toggle` 消息发给当前 tab。
 - **`providers/`** —— 翻译服务实现。`providers/index.js` 提供 `translate(name, text, targetLang, config)` 路由，返回 `{text}`。当前两个 provider：`google.js`（免费）和 `microsoft.js`（Azure Translator）。**敏感配置（API Key 等）由 background 从 `chrome.storage.sync` 读取后注入 provider，永远不进 content.js 上下文**。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
-- **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译、输入框三击空格翻译。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
+- **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译、输入框三击空格翻译、划词翻译气泡。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
 - **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、选输入框翻译触发方式、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。
 
 ### 关键消息流
@@ -68,6 +68,18 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 
 提示气泡 `.itl-input-tip` append 到 `document.body`，`position: fixed` + 极高 z-index，遵循"翻译中 → 已替换/失败"三态。气泡不计入 `data-itl-done` 体系，`turnOff()` 也不清理（短暂浮层，自带 setTimeout 移除）。
 
+## 划词翻译气泡
+
+`selectionTranslate` ∈ `{off, button, auto}`，默认 `off`。开启后 document 级 `mousedown` / `mouseup` / `keydown`（capture）监听：
+
+- **mouseup 后 setTimeout(0)**：等浏览器把 selection 落定再 `readSelection`；少于 2 个字符不弹。
+- **mousedown 先清气泡**：开始新选择 / 点击空白都会拆掉旧浮层；点中浮层自身（`closest(".itl-selection-bubble")`）则保留。
+- **Shadow DOM**：先遍历 `e.composedPath()` 上的 `ShadowRoot.getSelection()`（GitHub 评论框、Web Components 输入区），fallback 才是 `window.getSelection()`。
+- **定位**：`getRangeAt(0).getBoundingClientRect()`，默认放在选区上方，上方放不下转到下方；`offsetWidth/Height` 实测后做视口边缘 clamp。空 rect（编辑器边缘）时回退到鼠标坐标。
+- **两种模式**：`button` 先弹一个蓝色"翻译"按钮，点击后再请求；`auto` 直接走"翻译中… → 译文/失败"。失败浮层不自动消失，让用户看清错误信息（按 Esc 或点击空白处关）。
+
+浮层 `.itl-selection-bubble` 同样 append 到 `document.body`，`position: fixed` + 极高 z-index + `user-select: none`，不进 `data-itl-done` 体系。
+
 ## 译文样式预设
 
 `content.css` 内置 5 种：`default` / `underline` / `blur` / `bold` / `card`。`style` 字段存 storage，content.js 在插入 `.itl-translation` 时挂 `.itl-style-xxx`。切换样式时 `refreshExistingStyles()` 会更新已插入的节点，无需还原重译。
@@ -102,7 +114,7 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 | `providers/index.js` | provider 路由表（返回 `{text}`） |
 | `providers/google.js` | Google 免费翻译实现 |
 | `providers/microsoft.js` | Microsoft Translator（Azure） |
-| `content.js` | DOM 遍历、并发调度、译文插入/清理、MutationObserver、悬停翻译、输入框三击空格翻译 |
+| `content.js` | DOM 遍历、并发调度、译文插入/清理、MutationObserver、悬停翻译、输入框三击空格翻译、划词翻译气泡 |
 | `content.css` | `.itl-translation` 译文块样式 + 5 种样式预设 |
 | `popup.html` | 弹窗 UI（含内联样式） |
 | `popup.js` | 弹窗交互、`chrome.storage.sync` 持久化 |
