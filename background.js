@@ -18,6 +18,16 @@ async function handleTranslate(msg) {
   const provider = msg.provider || DEFAULT_PROVIDER;
   const config = await loadProviderConfig(provider);
   const result = await translate(provider, msg.text, msg.targetLang, config);
+  // 调试：打印每次翻译的入参 + API 返回，便于对照 content.js 那边的 alignment 切片。
+  // 想看的话打开 chrome://extensions/ → 本扩展 → "Service Worker" 链接。
+  console.log("[ITL bg] translate", {
+    provider,
+    targetLang: msg.targetLang,
+    srcLen: (msg.text || "").length,
+    src: msg.text,
+    tgt: result.text || "",
+    alignment: result.alignment || null,
+  });
   return {
     translated: result.text || "",
     alignment: result.alignment || null,

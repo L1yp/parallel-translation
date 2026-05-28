@@ -25,9 +25,11 @@
   const originalChildren = new WeakMap();
 
   // —— 调试开关 ————————————————————————————————————————————
-  // 控制台执行 __itlDebug(true) 开启；__itlDebug(false) 关闭。
+  // 默认开启：content script 跑在 isolated world，DevTools Console 默认上下文是页面主世界，
+  // 直接敲 __itlDebug(true) 调不到（除非在 console 左上角切到本扩展上下文）。所以默认 true，
+  // 需要关时切上下文后执行 __itlDebug(false)。
   // 开启后每段翻译会打印 alignment 期望子串 vs wrap 后实际 span 内容的对照表。
-  let DEBUG = false;
+  let DEBUG = true;
   window.__itlDebug = function (v) {
     DEBUG = v !== false;
     console.log("[ITL] debug =", DEBUG);
