@@ -492,8 +492,10 @@
 
   function fetchSelectionTranslation(bubble, text, rect, fallbackXY) {
     const wantDict = isSingleWord(text);
+    console.log("[ITL dict] req", { text, length: text.length, wantDict, provider });
     translateRemote(text, null, wantDict)
       .then((result) => {
+        console.log("[ITL dict] resp", { text: result.text, dict: result.dict });
         if (!bubble.isConnected) return;
         bubble.classList.remove("itl-selection-loading");
         bubble.classList.add("itl-selection-done");

@@ -19,6 +19,9 @@ async function handleTranslate(msg) {
   const config = await loadProviderConfig(provider);
   const options = { wantDict: !!msg.wantDict };
   const result = await translate(provider, msg.text, msg.targetLang, config, options);
+  if (options.wantDict) {
+    console.log("[ITL bg] dict", { provider, text: msg.text, targetLang: msg.targetLang, dict: result.dict });
+  }
   return { translated: result.text || "", dict: result.dict || null };
 }
 

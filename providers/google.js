@@ -28,7 +28,9 @@ export async function translate(text, targetLang, config, options) {
 
   const out = { text: text_ };
   if (wantDict) {
+    console.log("[ITL google] raw data[1]/[12]/[13]:", data[1], data[12], data[13]);
     const dict = parseGoogleDict(data);
+    console.log("[ITL google] parsed dict:", dict);
     if (dict) out.dict = dict;
   }
   return out;
