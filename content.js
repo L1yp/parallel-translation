@@ -24,6 +24,27 @@
   // 保存原文被切 span 之前的 childNodes，供 turnOff() 还原
   const originalChildren = new WeakMap();
 
+  // —— 调试开关 ————————————————————————————————————————————
+  // 控制台执行 __itlDebug(true) 开启；__itlDebug(false) 关闭。
+  // 开启后每段翻译会打印 alignment 期望子串 vs wrap 后实际 span 内容的对照表。
+  let DEBUG = false;
+  window.__itlDebug = function (v) {
+    DEBUG = v !== false;
+    console.log("[ITL] debug =", DEBUG);
+    return DEBUG;
+  };
+  // 控制台手动高亮某个 group，例如 __itlHighlight("g3-2")
+  window.__itlHighlight = function (groupId) {
+    document.querySelectorAll(".itl-tok-active").forEach((s) =>
+      s.classList.remove("itl-tok-active")
+    );
+    if (!groupId) return 0;
+    const safe = (window.CSS && CSS.escape) ? CSS.escape(groupId) : groupId;
+    const list = document.querySelectorAll('.itl-tok[data-itl-group~="' + safe + '"]');
+    list.forEach((s) => s.classList.add("itl-tok-active"));
+    return list.length;
+  };
+
   // —— 工具函数 ——————————————————————————————————————————————
 
   function isVisible(el) {
@@ -194,7 +215,7 @@
   // 一组全局递增的 group id 前缀，避免不同段之间互相误命中
   let groupSeq = 0;
 
-  function appendTranslation(el, leadingOffset, result) {
+  function appendTranslation(el, leadingOffset, result, debugSrcText) {
     const tgtText = result.text || "";
     const alignment = result.alignment;
 
@@ -205,18 +226,74 @@
 
     const useAlignment = !!(alignment && alignment.length);
     if (useAlignment) {
-      const prefix = "g" + (groupSeq++) + "-";
+      const seq = groupSeq++;
+      const prefix = "g" + seq + "-";
       node.appendChild(buildAlignedFragmentForTarget(tgtText, alignment, prefix));
 
       // 原文用 TreeWalker + splitText 原地 wrap span —— 不破坏内嵌 <a>/<strong> 等结构。
       // 先快照 childNodes 以便 turnOff 还原原文 DOM。
       originalChildren.set(el, Array.from(el.childNodes).map((n) => n.cloneNode(true)));
       wrapAlignedSourceInElement(el, alignment, prefix, leadingOffset);
+
+      if (DEBUG) logAlignmentDebug(el, seq, prefix, debugSrcText, tgtText, alignment, leadingOffset);
     } else {
       node.textContent = tgtText;
+      if (DEBUG) console.log("[ITL] 段（无 alignment）：", debugSrcText, "→", tgtText);
     }
 
     el.appendChild(node);
+  }
+
+  // 打印 alignment 调试信息：alignment 期望的 src/tgt 子串 vs DOM 中实际 wrap 出来的 span 内容。
+  // 两边对不上即为索引偏移问题（端点 inclusive/exclusive、leadingOffset、textContent vs API 字符流不一致等）。
+  function logAlignmentDebug(el, seq, prefix, srcText, tgtText, alignment, leadingOffset) {
+    console.groupCollapsed(
+      "[ITL] 对齐调试 g" + seq + " · " + (srcText.slice(0, 40) + (srcText.length > 40 ? "…" : ""))
+    );
+    console.log("element:", el);
+    console.log("发给 API 的原文（长度 " + srcText.length + "）:", JSON.stringify(srcText));
+    console.log("API 返回的译文（长度 " + tgtText.length + "）:", JSON.stringify(tgtText));
+    console.log("leadingOffset:", leadingOffset, "（trim 掉的首部空白字符数，会加到 src 索引上）");
+
+    // 1) alignment 期望的子串
+    const expected = alignment.map((a, idx) => ({
+      group: prefix + idx,
+      srcRange: a.srcStart + ":" + a.srcEnd,
+      srcExpected: srcText.slice(a.srcStart, a.srcEnd + 1),
+      tgtRange: a.tgtStart + ":" + a.tgtEnd,
+      tgtExpected: tgtText.slice(a.tgtStart, a.tgtEnd + 1),
+    }));
+    console.log("alignment（期望子串，按对齐对索引）:");
+    console.table(expected);
+
+    // 2) DOM 中实际 wrap 出来的 span 内容（按 group 聚合）
+    const srcSpans = Array.from(el.querySelectorAll('.itl-tok[data-itl-side="src"]'));
+    const tgtSpans = Array.from(el.querySelectorAll('.itl-tok[data-itl-side="tgt"]'));
+    const byGroup = {};
+    [...srcSpans, ...tgtSpans].forEach((s) => {
+      const text = s.textContent;
+      const side = s.getAttribute("data-itl-side");
+      (s.getAttribute("data-itl-group") || "").split(/\s+/).filter(Boolean).forEach((g) => {
+        if (!byGroup[g]) byGroup[g] = { group: g, srcActual: "", tgtActual: "" };
+        if (side === "src") byGroup[g].srcActual += text;
+        else byGroup[g].tgtActual += text;
+      });
+    });
+    const actualRows = expected.map((e) => byGroup[e.group] || { group: e.group, srcActual: "(无)", tgtActual: "(无)" });
+    console.log("实际 wrap 后 DOM 中的 span 内容（按 group 聚合，应与上表一致）:");
+    console.table(actualRows);
+
+    // 3) 不匹配的 group
+    const mismatches = expected.filter((e) => {
+      const a = byGroup[e.group];
+      return !a || a.srcActual !== e.srcExpected || a.tgtActual !== e.tgtExpected;
+    });
+    if (mismatches.length) {
+      console.warn("⚠ 不匹配的 group：", mismatches.map((m) => m.group));
+    } else {
+      console.log("✓ 全部 group 匹配");
+    }
+    console.groupEnd();
   }
 
   // —— 并发队列 ——————————————————————————————————————————————
@@ -247,7 +324,7 @@
         const result = await translateRemote(text);
         const out = (result.text || "").trim();
         if (out && out !== text) {
-          appendTranslation(el, leadingOffset, result);
+          appendTranslation(el, leadingOffset, result, text);
         }
       } catch (e) {
         // 单段失败不打断队列（Google 免费接口经常限流；Microsoft 配置错也只是这段失败）
@@ -384,7 +461,7 @@
       .then((result) => {
         const out = (result.text || "").trim();
         if (out && out !== text) {
-          appendTranslation(block, leadingOffset, result);
+          appendTranslation(block, leadingOffset, result, text);
         }
       })
       .catch((err) => console.warn("[ITL hover] 翻译失败：", err));
