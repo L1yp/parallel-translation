@@ -94,9 +94,7 @@ export async function translate(text, targetLang, config, options) {
 
   const translations = Array.isArray(data.translation) ? data.translation : [];
   const out = { text: translations.join("\n") };
-  console.log("[ITL youdao] from:", from, "keys:", Object.keys(data), "raw:", data);
   const dict = parseYoudaoDict(data);
-  console.log("[ITL youdao] parsed dict:", dict);
   if (dict) out.dict = dict;
   return out;
 }
@@ -133,6 +131,12 @@ function parseYoudaoDict(data) {
       .filter((w) => w.key && w.values.length);
     if (webExplains.length) dict.webExplains = webExplains;
   }
+  // 发音：即使 basic 缺失（有道判 isWord=false），speakUrl/tSpeakUrl 仍可能存在
+  const audio = {};
+  if (typeof data.speakUrl === "string" && data.speakUrl) audio.src = data.speakUrl;
+  if (typeof data.tSpeakUrl === "string" && data.tSpeakUrl) audio.tgt = data.tSpeakUrl;
+  if (Object.keys(audio).length) dict.audio = audio;
+
   return Object.keys(dict).length ? dict : null;
 }
 

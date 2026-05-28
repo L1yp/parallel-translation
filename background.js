@@ -23,9 +23,6 @@ async function handleTranslate(msg) {
     sourceLang: msg.sourceLang || "auto",
   };
   const result = await translate(provider, msg.text, msg.targetLang, config, options);
-  if (options.wantDict) {
-    console.log("[ITL bg] dict", { provider, text: msg.text, targetLang: msg.targetLang, dict: result.dict });
-  }
   return { translated: result.text || "", dict: result.dict || null };
 }
 

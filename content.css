@@ -147,11 +147,30 @@
   max-width: 380px;
   padding: 10px 14px;
 }
+.itl-selection-bubble.itl-selection-dict .itl-sel-headword-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
 .itl-selection-bubble.itl-selection-dict .itl-sel-headword {
   font-size: 15px;
   font-weight: 600;
   color: #fff;
-  margin-bottom: 2px;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-audio {
+  background: transparent;
+  border: none;
+  color: #f9fafb;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  user-select: none;
+  pointer-events: auto;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-audio:hover {
+  filter: brightness(1.3);
 }
 .itl-selection-bubble.itl-selection-dict .itl-sel-phonetic {
   font-size: 12px;

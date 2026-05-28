@@ -98,13 +98,19 @@ provider 接口里 `options.sourceLang` 走完整链路：
 
 各 provider 能力差异（不要凭空补齐缺失字段，让 UI 自行降级）：
 
-| provider | phonetics | explains | definitions | webExplains | examples |
-|---|---|---|---|---|---|
-| youdao   | ✅ 英/美 IPA | ✅ basic.explains | — | ✅ web[] | — |
-| google   | — | ✅ 解析 `data[1]`（dt=bd） | ✅ 解析 `data[12]`（dt=md） | — | ✅ 解析 `data[13]`（dt=ex，需 `stripHtml`） |
-| microsoft | — | — | — | — | — |
+| provider | phonetics | explains | definitions | webExplains | examples | audio |
+|---|---|---|---|---|---|---|
+| youdao   | ✅ 英/美 IPA（仅当 isWord=true） | ✅ basic.explains | — | ✅ web[] | — | ✅ speakUrl / tSpeakUrl |
+| google   | — | ✅ 解析 `data[1]`（dt=bd） | ✅ 解析 `data[12]`（dt=md） | — | ✅ 解析 `data[13]`（dt=ex，需 `stripHtml`） | ✅ 自拼 `translate_tts` URL（用 `data[2]` 检测到的源语言） |
+| microsoft | — | — | — | — | — | — |
 
-Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体翻倍。有道 `basic` / `web` 字段对句子查询为 null，`parseYoudaoDict` 直接返回 null 让上层降级。
+Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体翻倍。
+
+有道 `basic` / `web` 仅在 API 判 `isWord=true` 时存在（连 `become` 这种动词原型也可能被判 false）；但 `speakUrl` / `tSpeakUrl` 几乎一定有，所以 `parseYoudaoDict` 即便 basic 缺失，也会因为有 audio 字段而返回非 null dict，让 UI 至少能渲染 headword + 播放按钮 + 译文。
+
+**有道 `from=auto` 不触发词典通路**：调 `/api` 时 from=auto 通常只返回 `translation` 不带 basic/web；wantDict 命中时按 `/\p{Script=Han}/u` 与 `/^[A-Za-z][A-Za-z'\-]+$/` 启发式锁 from 为 `zh-CHS` / `en`，调用方无感知。
+
+**音频播放在 content.js 用 `new Audio(url).play()`**：受**页面 CSP 的 media-src** 影响（不受 host_permissions），少数严控站点可能拦。失败时 `console.warn`，不打扰用户。manifest 的 host_permissions 必须包含两个 TTS 域：`translate.googleapis.com` 与 `openapi.youdao.com`。
 
 ## 译文样式预设
 

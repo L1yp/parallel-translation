@@ -29,12 +29,24 @@ export async function translate(text, targetLang, config, options) {
 
   const out = { text: text_ };
   if (wantDict) {
-    console.log("[ITL google] raw data[1]/[12]/[13]:", data[1], data[12], data[13]);
-    const dict = parseGoogleDict(data);
-    console.log("[ITL google] parsed dict:", dict);
-    if (dict) out.dict = dict;
+    const dict = parseGoogleDict(data) || {};
+    // 发音 URL（response 不带，自己拼）。源语言用 data[2] 检测到的代码。
+    const detectedSrc = typeof data[2] === "string" && data[2] ? data[2] : null;
+    const audio = {};
+    if (detectedSrc) audio.src = ttsUrl(text, detectedSrc);
+    if (text_) audio.tgt = ttsUrl(text_, targetLang);
+    if (Object.keys(audio).length) dict.audio = audio;
+    if (Object.keys(dict).length) out.dict = dict;
   }
   return out;
+}
+
+// 非官方 TTS 端点，单词/短句可直接当 <audio> src 用。长文本会被拒。
+function ttsUrl(text, lang) {
+  return "https://translate.googleapis.com/translate_tts" +
+    "?ie=UTF-8&client=tw-ob" +
+    "&q=" + encodeURIComponent(text) +
+    "&tl=" + encodeURIComponent(lang);
 }
 
 // data[1] (dt=bd)：[ [pos, [translations...], [...], baseForm], ... ]

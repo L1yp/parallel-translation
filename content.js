@@ -497,10 +497,8 @@
 
   function fetchSelectionTranslation(bubble, text, rect, fallbackXY) {
     const wantDict = isSingleWord(text);
-    console.log("[ITL dict] req", { text, length: text.length, wantDict, provider });
     translateRemote(text, { wantDict })
       .then((result) => {
-        console.log("[ITL dict] resp", { text: result.text, dict: result.dict });
         if (!bubble.isConnected) return;
         bubble.classList.remove("itl-selection-loading");
         bubble.classList.add("itl-selection-done");
@@ -535,7 +533,20 @@
       return n;
     };
 
-    append("itl-sel-headword", headword);
+    // headword 行：词 + 可选的「原文 / 译文」发音按钮
+    const headRow = document.createElement("div");
+    headRow.className = "itl-sel-headword-row";
+    const headSpan = document.createElement("span");
+    headSpan.className = "itl-sel-headword";
+    headSpan.textContent = headword;
+    headRow.appendChild(headSpan);
+    if (dict.audio && dict.audio.src) {
+      headRow.appendChild(makeAudioButton(dict.audio.src, "🔊", "播放原文发音"));
+    }
+    if (dict.audio && dict.audio.tgt) {
+      headRow.appendChild(makeAudioButton(dict.audio.tgt, "🔉", "播放译文发音"));
+    }
+    bubble.appendChild(headRow);
 
     if (Array.isArray(dict.phonetics) && dict.phonetics.length) {
       const ph = dict.phonetics
@@ -582,6 +593,30 @@
         }
         bubble.appendChild(wrap);
       }
+    }
+  }
+
+  function makeAudioButton(url, icon, title) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "itl-sel-audio";
+    btn.textContent = icon;
+    btn.title = title;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      playAudio(url);
+    });
+    return btn;
+  }
+
+  // <audio> 的 src 加载受页面 CSP 的 media-src 影响；大多数页面不限，少数会拦
+  function playAudio(url) {
+    try {
+      const a = new Audio(url);
+      a.play().catch((err) => console.warn("[ITL] audio play failed:", err));
+    } catch (e) {
+      console.warn("[ITL] audio init failed:", e);
     }
   }
 
