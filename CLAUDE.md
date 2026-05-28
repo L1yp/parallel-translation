@@ -82,6 +82,20 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 
 浮层 `.itl-selection-bubble` 同样 append 到 `document.body`，`position: fixed` + 极高 z-index + `user-select: none`，不进 `data-itl-done` 体系。
 
+### 单词词典模式
+
+选区命中 `isSingleWord`（无空格、长度 ≤ 30、至少含一个字母 / CJK）时，`translateRemote` 带 `wantDict: true` 调 background；命中后浮层切到 `.itl-selection-dict` 视图，渲染 headword / 音标 / 词性释义 / 释义 / 网络释义 / 例句若干区块。**全程 `textContent` 逐节点 append**，永远不要为这部分引入 `innerHTML`。
+
+各 provider 能力差异（不要凭空补齐缺失字段，让 UI 自行降级）：
+
+| provider | phonetics | explains | definitions | webExplains | examples |
+|---|---|---|---|---|---|
+| youdao   | ✅ 英/美 IPA | ✅ basic.explains | — | ✅ web[] | — |
+| google   | — | ✅ 解析 `data[1]`（dt=bd） | ✅ 解析 `data[12]`（dt=md） | — | ✅ 解析 `data[13]`（dt=ex，需 `stripHtml`） |
+| microsoft | — | — | — | — | — |
+
+Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体翻倍。有道 `basic` / `web` 字段对句子查询为 null，`parseYoudaoDict` 直接返回 null 让上层降级。
+
 ## 译文样式预设
 
 `content.css` 内置 5 种：`default` / `underline` / `blur` / `bold` / `card`。`style` 字段存 storage，content.js 在插入 `.itl-translation` 时挂 `.itl-style-xxx`。切换样式时 `refreshExistingStyles()` 会更新已插入的节点，无需还原重译。
@@ -105,7 +119,7 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 - **不要把样式预设的 class 加到原文 `el` 上**：`.itl-style-xxx` 只挂在 `.itl-translation` 子节点上；挂到原文节点会污染原网页样式且 `turnOff()` 不会清。
 - **新增 provider 时不要在 content.js 里加分支**：路由集中在 `providers/index.js`。content.js 只透传 `provider` 字符串。
 - **API Key 永远不进 content.js**：popup 写入 `chrome.storage.sync`，background 在 `handleTranslate` 里读取后传入 provider。content.js 不应感知任何凭证字段。
-- **provider 接口签名**：`translate(text, targetLang, config?) -> {text}`。必须返回对象，不要返回字符串。
+- **provider 接口签名**：`translate(text, targetLang, config?, options?) -> {text, dict?}`。必须返回对象。`options.wantDict` 为 `true` 时尽量返回 `dict`（音标 / 词性释义 / 例句 / 网络释义），不支持就不带这个字段，content.js 会降级为纯译文。
 
 ## 文件清单
 

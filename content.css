@@ -141,3 +141,56 @@
 .itl-selection-bubble.itl-selection-error {
   background: rgba(185, 28, 28, 0.95);
 }
+
+/* —— 单词词典视图（选区命中单词时） —— */
+.itl-selection-bubble.itl-selection-dict {
+  max-width: 380px;
+  padding: 10px 14px;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-headword {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-phonetic {
+  font-size: 12px;
+  color: #d1d5db;
+  margin-bottom: 6px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-translation,
+.itl-selection-bubble.itl-selection-dict .itl-sel-explain,
+.itl-selection-bubble.itl-selection-dict .itl-sel-definition {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #f9fafb;
+  margin: 2px 0;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-section-title {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: 8px 0 3px;
+  letter-spacing: 0.04em;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-web {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e5e7eb;
+  margin: 2px 0;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-example {
+  margin: 4px 0;
+  padding-left: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.15);
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-example-src {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e5e7eb;
+}
+.itl-selection-bubble.itl-selection-dict .itl-sel-example-tgt {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}

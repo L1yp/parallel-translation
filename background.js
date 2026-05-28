@@ -17,8 +17,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function handleTranslate(msg) {
   const provider = msg.provider || DEFAULT_PROVIDER;
   const config = await loadProviderConfig(provider);
-  const result = await translate(provider, msg.text, msg.targetLang, config);
-  return { translated: result.text || "" };
+  const options = { wantDict: !!msg.wantDict };
+  const result = await translate(provider, msg.text, msg.targetLang, config, options);
+  return { translated: result.text || "", dict: result.dict || null };
 }
 
 async function loadProviderConfig(provider) {

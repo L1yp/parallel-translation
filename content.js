@@ -53,13 +53,20 @@
     return all.filter(isLeafBlock);
   }
 
-  function translateRemote(text, overrideTargetLang) {
+  // 返回 { text, dict }。dict 仅在 wantDict 且 provider 返回时存在（例如选区命中单词）。
+  function translateRemote(text, overrideTargetLang, wantDict) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { type: "translate", text, targetLang: overrideTargetLang || targetLang, provider },
+        {
+          type: "translate",
+          text,
+          targetLang: overrideTargetLang || targetLang,
+          provider,
+          wantDict: !!wantDict,
+        },
         (resp) => {
           if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-          if (resp && resp.ok) resolve(resp.translated);
+          if (resp && resp.ok) resolve({ text: resp.translated || "", dict: resp.dict || null });
           else reject(new Error((resp && resp.error) || "translate failed"));
         }
       );
@@ -133,10 +140,10 @@
       const text = (el.innerText || "").trim();
       if (text.length < 2) continue;
       try {
-        const translated = await translateRemote(text);
-        const out = (translated || "").trim();
+        const result = await translateRemote(text);
+        const out = (result.text || "").trim();
         if (out && out !== text) {
-          appendTranslation(el, translated);
+          appendTranslation(el, result.text);
         }
       } catch (e) {
         // 单段失败不打断队列（Google 免费接口经常限流；Microsoft 配置错也只是这段失败）
@@ -235,10 +242,10 @@
     const placeholder = appendLoading(block);
 
     translateRemote(text)
-      .then((translated) => {
-        const out = (translated || "").trim();
+      .then((result) => {
+        const out = (result.text || "").trim();
         if (out && out !== text) {
-          finalizeLoading(placeholder, translated);
+          finalizeLoading(placeholder, result.text);
         } else {
           placeholder.remove();
         }
@@ -387,8 +394,8 @@
     const tip = makeInputTip(target, "翻译中…", "loading");
 
     translateRemote(text, inputTargetLang)
-      .then((translated) => {
-        const out = (translated || "").trim();
+      .then((result) => {
+        const out = (result.text || "").trim();
         if (!out || out === text) {
           updateInputTip(tip, "无变化", "success");
           dismissInputTip(tip, 1200);
@@ -475,14 +482,27 @@
     bubble.style.top = Math.round(top) + "px";
   }
 
+  // 单词判定：无空格、长度 ≤ 30、至少含一个字母（含 CJK）。命中后请求 wantDict。
+  function isSingleWord(text) {
+    if (!text || text.length > 30) return false;
+    if (/\s/.test(text)) return false;
+    if (!/[\p{L}\p{M}]/u.test(text)) return false;
+    return true;
+  }
+
   function fetchSelectionTranslation(bubble, text, rect, fallbackXY) {
-    translateRemote(text)
-      .then((translated) => {
+    const wantDict = isSingleWord(text);
+    translateRemote(text, null, wantDict)
+      .then((result) => {
         if (!bubble.isConnected) return;
         bubble.classList.remove("itl-selection-loading");
         bubble.classList.add("itl-selection-done");
-        const out = (translated || "").trim();
-        bubble.textContent = out || "（无内容）";
+        const out = (result.text || "").trim();
+        if (wantDict && result.dict) {
+          renderDictBubble(bubble, text, out, result.dict);
+        } else {
+          bubble.textContent = out || "（无内容）";
+        }
         positionSelectionBubble(bubble, rect, fallbackXY);
       })
       .catch((err) => {
@@ -493,6 +513,69 @@
         bubble.textContent = "翻译失败：" + msg;
         positionSelectionBubble(bubble, rect, fallbackXY);
       });
+  }
+
+  // 用 textContent 逐节点构建词典视图，避免 innerHTML 在第三方页面引入 XSS 风险
+  function renderDictBubble(bubble, headword, translation, dict) {
+    bubble.classList.add("itl-selection-dict");
+    bubble.textContent = "";
+
+    const append = (cls, txt) => {
+      const n = document.createElement("div");
+      n.className = cls;
+      n.textContent = txt;
+      bubble.appendChild(n);
+      return n;
+    };
+
+    append("itl-sel-headword", headword);
+
+    if (Array.isArray(dict.phonetics) && dict.phonetics.length) {
+      const ph = dict.phonetics
+        .map((p) => (p.region ? p.region + " " : "") + "/" + p.ipa + "/")
+        .join("   ");
+      append("itl-sel-phonetic", ph);
+    }
+
+    // 没有 explains 时，把主译文作为一行显示
+    const hasExplains = Array.isArray(dict.explains) && dict.explains.length;
+    if (!hasExplains && translation) {
+      append("itl-sel-translation", translation);
+    }
+    if (hasExplains) {
+      for (const e of dict.explains) append("itl-sel-explain", e);
+    }
+
+    if (Array.isArray(dict.definitions) && dict.definitions.length) {
+      append("itl-sel-section-title", "释义");
+      for (const d of dict.definitions) append("itl-sel-definition", d);
+    }
+
+    if (Array.isArray(dict.webExplains) && dict.webExplains.length) {
+      append("itl-sel-section-title", "网络");
+      for (const w of dict.webExplains) {
+        append("itl-sel-web", w.key + " — " + w.values.join("；"));
+      }
+    }
+
+    if (Array.isArray(dict.examples) && dict.examples.length) {
+      append("itl-sel-section-title", "例句");
+      for (const ex of dict.examples) {
+        const wrap = document.createElement("div");
+        wrap.className = "itl-sel-example";
+        const src = document.createElement("div");
+        src.className = "itl-sel-example-src";
+        src.textContent = ex.src;
+        wrap.appendChild(src);
+        if (ex.tgt) {
+          const tgt = document.createElement("div");
+          tgt.className = "itl-sel-example-tgt";
+          tgt.textContent = ex.tgt;
+          wrap.appendChild(tgt);
+        }
+        bubble.appendChild(wrap);
+      }
+    }
   }
 
   function showSelectionBubble(info, e) {

@@ -41,9 +41,9 @@ function randSalt() {
  * @param {string} text
  * @param {string} targetLang  例如 "zh-CN"
  * @param {{appKey:string, appSecret:string}} config
- * @returns {Promise<{text:string}>}
+ * @returns {Promise<{text:string, dict?:object}>}
  */
-export async function translate(text, targetLang, config) {
+export async function translate(text, targetLang, config /*, options */) {
   if (!config || !config.appKey || !config.appSecret) {
     throw new Error("有道智云未配置 App Key/App Secret，请在设置中填写");
   }
@@ -82,7 +82,37 @@ export async function translate(text, targetLang, config) {
   }
 
   const translations = Array.isArray(data.translation) ? data.translation : [];
-  return { text: translations.join("\n") };
+  const out = { text: translations.join("\n") };
+  const dict = parseYoudaoDict(data);
+  if (dict) out.dict = dict;
+  return out;
+}
+
+// 有道对单词查询会额外返回 basic（音标+词性释义）和 web（网络释义）。
+// 句子查询时这两个字段为 null，此处返回 null 让上层降级为纯译文。
+function parseYoudaoDict(data) {
+  const dict = {};
+  if (data.basic && typeof data.basic === "object") {
+    const b = data.basic;
+    const phonetics = [];
+    if (b["uk-phonetic"]) phonetics.push({ region: "英", ipa: b["uk-phonetic"] });
+    if (b["us-phonetic"]) phonetics.push({ region: "美", ipa: b["us-phonetic"] });
+    if (!phonetics.length && b.phonetic) phonetics.push({ ipa: b.phonetic });
+    if (phonetics.length) dict.phonetics = phonetics;
+    if (Array.isArray(b.explains) && b.explains.length) {
+      dict.explains = b.explains.slice(0, 6);
+    }
+  }
+  if (Array.isArray(data.web) && data.web.length) {
+    const webExplains = data.web.slice(0, 4)
+      .map((w) => ({
+        key: w && w.key,
+        values: w && Array.isArray(w.value) ? w.value.slice(0, 4) : [],
+      }))
+      .filter((w) => w.key && w.values.length);
+    if (webExplains.length) dict.webExplains = webExplains;
+  }
+  return Object.keys(dict).length ? dict : null;
 }
 
 // 常见错误码 → 中文说明，方便用户在 options 测试连接时定位问题
