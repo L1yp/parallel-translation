@@ -7,6 +7,7 @@ const DEFAULTS = {
   provider: "google",
   style: "default",
   hoverKey: "alt",
+  inputTranslate: "off",
   observerEnabled: true,
 };
 
@@ -22,6 +23,7 @@ const langSel = $("lang");
 const providerSel = $("provider");
 const styleSel = $("style");
 const hoverSel = $("hover");
+const inputTranslateSel = $("input-translate");
 const observerChk = $("observer");
 const goBtn = $("go");
 const credTip = $("cred-tip");
@@ -46,6 +48,7 @@ function readPrefs() {
     provider: providerSel.value,
     style: styleSel.value,
     hoverKey: hoverSel.value,
+    inputTranslate: inputTranslateSel.value,
     observerEnabled: observerChk.checked,
   };
 }
@@ -55,6 +58,7 @@ function applyPrefsToUI(prefs) {
   providerSel.value = prefs.provider;
   styleSel.value = prefs.style;
   hoverSel.value = prefs.hoverKey;
+  inputTranslateSel.value = prefs.inputTranslate;
   observerChk.checked = !!prefs.observerEnabled;
 }
 
@@ -66,7 +70,7 @@ chrome.storage.sync.get([...Object.keys(DEFAULTS), ...ALL_CRED_KEYS], (res) => {
 function persistOnChange() {
   chrome.storage.sync.set(readPrefs());
 }
-[langSel, styleSel, hoverSel, observerChk].forEach((el) =>
+[langSel, styleSel, hoverSel, inputTranslateSel, observerChk].forEach((el) =>
   el.addEventListener("change", persistOnChange)
 );
 

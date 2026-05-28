@@ -28,6 +28,7 @@
 > Microsoft / 有道的 Key 等敏感配置在独立的设置页填写：popup 右下角点 `⚙ 设置`，或右键扩展图标 → 选项。
 - **译文样式** —— 默认（蓝色虚线）/ 下划线 / 模糊（悬停显示）/ 加粗 / 卡片
 - **悬停翻译** —— 选 `Alt` / `Ctrl` / `Shift`，按住对应键 + 鼠标悬停在段落上即可单段翻译。选「关闭」彻底拆除监听。
+- **输入框翻译** —— 选「连按 3 次空格触发」后，在 `input` / `textarea` / `contenteditable`（如 ChatGPT 输入框）里连按 3 个空格即可把当前内容翻译成目标语言并回填。中文/日文 IME 拼音选词的空格不会被拦截。默认关闭（避免改变原生输入行为）。
 - **自动翻译动态加载的内容** —— 默认开启，监听 SPA / 无限滚动新增的段落。Twitter/Reddit 触发限流可关。
 
 ### 注册 Microsoft Translator（可选）
@@ -52,7 +53,7 @@
 - `background.js` —— 后台 Service Worker，唯一的翻译 fetch 入口，转发快捷键，注入敏感配置
 - `providers/` —— 翻译服务实现（`google.js` / `microsoft.js` / `youdao.js`）+ 路由
 - `options.html` / `options.js` —— 独立设置页（API Key 等敏感配置）
-- `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译
+- `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译 / 输入框三击空格翻译
 - `content.css` —— 译文块样式与样式预设
 - `popup.html` / `popup.js` —— 弹窗界面与交互
 

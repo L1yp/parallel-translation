@@ -43,6 +43,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     "style",
     "observerEnabled",
     "hoverKey",
+    "inputTranslate",
     "provider",
   ]);
   chrome.tabs.sendMessage(tab.id, { type: "toggle", ...prefs }, () => {

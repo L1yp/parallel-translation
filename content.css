@@ -74,3 +74,31 @@
   border-top-color: rgba(185, 28, 28, 0.4);
   font-style: italic;
 }
+
+/* —— 输入框翻译提示气泡 —— */
+.itl-input-tip {
+  position: fixed;
+  background: rgba(31, 41, 55, 0.92);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 2147483647;
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transition: opacity 0.3s;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.itl-input-tip.itl-input-success {
+  background: rgba(22, 163, 74, 0.92);
+}
+.itl-input-tip.itl-input-error {
+  background: rgba(185, 28, 28, 0.92);
+}
+.itl-input-tip.itl-input-tip-fade {
+  opacity: 0;
+}

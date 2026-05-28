@@ -1,5 +1,5 @@
 // content.js —— 注入到网页中的核心逻辑
-// 职责：DOM 遍历 / 可见性过滤 / 并发调度 / 译文插入 / 动态内容监听 / 悬停翻译。
+// 职责：DOM 遍历 / 可见性过滤 / 并发调度 / 译文插入 / 动态内容监听 / 悬停翻译 / 输入框三击空格翻译。
 // 所有 DOM 操作集中在此，背景脚本只负责 fetch 与敏感配置注入。
 
 (function () {
@@ -8,7 +8,9 @@
   const CONCURRENCY = 4;            // 共享同一个队列；提高会触发 Google 限流
   const OBSERVER_DEBOUNCE = 300;    // 动态内容去抖，避免 Twitter/Reddit 之类高频 mutate 打爆接口
   const HOVER_THROTTLE = 80;        // 悬停 hit-test 节流
+  const SPACE_TRIPLE_WINDOW = 700;  // 输入框三击空格的最大间隔（毫秒）
   const STYLE_CLASSES = ["itl-style-underline", "itl-style-blur", "itl-style-bold", "itl-style-card"];
+  const INPUT_TYPES = new Set(["text", "search", "email", "url", "tel"]);
 
   let isOn = false;
   let targetLang = DEFAULT_TARGET;
@@ -16,6 +18,7 @@
   let style = "default";
   let observerEnabled = true;
   let hoverKey = "alt"; // alt | ctrl | shift | off
+  let inputTranslate = "off"; // off | space3
 
   // 作为"翻译单元"的块级元素。选叶子节点，避免父子重复翻译。
   const BLOCK_SELECTOR =
@@ -259,6 +262,161 @@
     }
   }
 
+  // —— 输入框翻译（三击空格）——————————————————————————————
+
+  // 用 WeakMap 按元素维护计数，避免在 detached 元素上泄漏
+  const tripleSpaceMap = new WeakMap();
+
+  function editableKind(el) {
+    if (!el) return null;
+    if (el.tagName === "TEXTAREA") return "textarea";
+    if (el.tagName === "INPUT") {
+      const t = (el.type || "text").toLowerCase();
+      return INPUT_TYPES.has(t) ? "input" : null;
+    }
+    if (el.isContentEditable) return "contenteditable";
+    return null;
+  }
+
+  function onInputKeyDown(e) {
+    if (inputTranslate !== "space3") return;
+    // 中文/日文等 IME 合成中（拼音的空格选词），不能拦截
+    if (e.isComposing || e.keyCode === 229) return;
+    const target = e.target;
+    const kind = editableKind(target);
+    if (!kind) return;
+
+    if (e.key !== " ") {
+      tripleSpaceMap.delete(target);
+      return;
+    }
+
+    const now = Date.now();
+    const state = tripleSpaceMap.get(target) || { count: 0, lastTime: 0 };
+    if (now - state.lastTime > SPACE_TRIPLE_WINDOW) {
+      state.count = 1;
+    } else {
+      state.count += 1;
+    }
+    state.lastTime = now;
+    tripleSpaceMap.set(target, state);
+
+    if (state.count >= 3) {
+      // 拦掉第 3 个空格；前两个已经写进 value，需要在取文本时剥掉
+      e.preventDefault();
+      tripleSpaceMap.delete(target);
+      handleInputTranslate(target, kind);
+    }
+  }
+
+  function readEditableText(target, kind) {
+    const raw = kind === "contenteditable"
+      ? (target.textContent || "")
+      : (target.value || "");
+    // 触发时 value/textContent 末尾刚好挂着 2 个空格，剥掉
+    return raw.replace(/ {1,2}$/, "");
+  }
+
+  // input/textarea 用原生 setter，绕过 React/Vue 的"值未变"短路
+  function writeInputValue(target, value) {
+    const proto = target.tagName === "TEXTAREA"
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+    setter.call(target, value);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    if (typeof target.setSelectionRange === "function") {
+      try { target.setSelectionRange(value.length, value.length); } catch (_) {}
+    }
+  }
+
+  function writeContentEditable(target, value) {
+    target.textContent = value;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_) {}
+  }
+
+  function applyTranslatedToInput(target, kind, value) {
+    if (kind === "contenteditable") writeContentEditable(target, value);
+    else writeInputValue(target, value);
+  }
+
+  function makeInputTip(target, text, variant) {
+    const tip = document.createElement("div");
+    tip.className = "itl-input-tip itl-input-" + variant;
+    tip.textContent = text;
+    document.body.appendChild(tip);
+    positionInputTip(tip, target);
+    return tip;
+  }
+
+  function positionInputTip(tip, target) {
+    if (!target.isConnected) return;
+    const rect = target.getBoundingClientRect();
+    tip.style.left = Math.round(rect.left) + "px";
+    tip.style.top = Math.round(rect.bottom + 4) + "px";
+  }
+
+  function updateInputTip(tip, text, variant) {
+    tip.textContent = text;
+    tip.classList.remove("itl-input-loading", "itl-input-success", "itl-input-error");
+    tip.classList.add("itl-input-" + variant);
+  }
+
+  function dismissInputTip(tip, delay) {
+    setTimeout(() => {
+      if (!tip.isConnected) return;
+      tip.classList.add("itl-input-tip-fade");
+      setTimeout(() => { if (tip.isConnected) tip.remove(); }, 300);
+    }, delay);
+  }
+
+  function handleInputTranslate(target, kind) {
+    const text = readEditableText(target, kind).trim();
+    if (text.length < 2) return;
+
+    const tip = makeInputTip(target, "翻译中…", "loading");
+
+    translateRemote(text)
+      .then((translated) => {
+        const out = (translated || "").trim();
+        if (!out || out === text) {
+          updateInputTip(tip, "无变化", "success");
+          dismissInputTip(tip, 1200);
+          return;
+        }
+        applyTranslatedToInput(target, kind, out);
+        positionInputTip(tip, target); // 文本变化后高度可能变，重新定位
+        updateInputTip(tip, "已替换", "success");
+        dismissInputTip(tip, 1200);
+      })
+      .catch((err) => {
+        console.warn("[ITL input] 翻译失败：", err);
+        const msg = (err && err.message) ? err.message : "未知错误";
+        updateInputTip(tip, "失败：" + msg, "error");
+        dismissInputTip(tip, 2500);
+      });
+  }
+
+  let inputListenerAttached = false;
+  function refreshInputListener() {
+    const want = inputTranslate === "space3";
+    if (want && !inputListenerAttached) {
+      document.addEventListener("keydown", onInputKeyDown, true);
+      inputListenerAttached = true;
+    } else if (!want && inputListenerAttached) {
+      document.removeEventListener("keydown", onInputKeyDown, true);
+      inputListenerAttached = false;
+    }
+  }
+
   // —— 偏好读取 / 变更同步 ————————————————————————————————————
 
   function applyPrefs(p) {
@@ -268,13 +426,15 @@
     if (typeof p.style === "string") style = p.style;
     if (typeof p.observerEnabled === "boolean") observerEnabled = p.observerEnabled;
     if (typeof p.hoverKey === "string") hoverKey = p.hoverKey;
+    if (typeof p.inputTranslate === "string") inputTranslate = p.inputTranslate;
   }
 
   chrome.storage.sync.get(
-    ["targetLang", "provider", "style", "observerEnabled", "hoverKey"],
+    ["targetLang", "provider", "style", "observerEnabled", "hoverKey", "inputTranslate"],
     (res) => {
       applyPrefs(res);
       refreshHoverListener();
+      refreshInputListener();
     }
   );
 
@@ -285,6 +445,10 @@
     if (changes.hoverKey) {
       hoverKey = changes.hoverKey.newValue;
       refreshHoverListener();
+    }
+    if (changes.inputTranslate) {
+      inputTranslate = changes.inputTranslate.newValue;
+      refreshInputListener();
     }
     if (changes.style) {
       style = changes.style.newValue;
@@ -305,6 +469,7 @@
     if (msg.type === "toggle") {
       applyPrefs(msg);
       refreshHoverListener();
+      refreshInputListener();
       if (isOn) {
         turnOff();
         sendResponse({ state: "off" });
