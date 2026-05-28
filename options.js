@@ -26,7 +26,7 @@ const $ = (id) => document.getElementById(id);
 // ===== 多页面路由 =====
 // hash 形如 #general、#site-rules、#site-rules?host=github.com
 const DEFAULT_PAGE = "general";
-const VALID_PAGES = new Set(["general", "hover", "selection", "input", "providers", "site-rules", "cache"]);
+const VALID_PAGES = new Set(["general", "hover", "selection", "input", "providers", "site-rules", "vocab", "cache"]);
 
 function parseHash() {
   const raw = (location.hash || "").replace(/^#/, "");
@@ -511,8 +511,493 @@ $("cache-clear").addEventListener("click", () => {
   });
 });
 
+// ===== 生词本 =====
+// 数据走 background → vocab.js（IndexedDB）。本页只发消息、渲染列表。
+
+const vocabState = {
+  search: "",
+  targetLang: "",
+  sortBy: "createdDesc",
+  items: [],
+  total: 0,
+  expanded: new Set(),
+  editingNote: null, // id 或 null
+};
+
+const vocabSearchEl = $("vocab-search");
+const vocabLangEl = $("vocab-lang");
+const vocabSortEl = $("vocab-sort");
+const vocabListEl = $("vocab-list");
+const vocabSummaryEl = $("vocab-summary");
+const vocabStatusEl = $("vocab-status");
+const vocabImportFile = $("vocab-import-file");
+
+function setVocabStatus(text, kind) {
+  vocabStatusEl.textContent = text || "";
+  vocabStatusEl.className = "cache-status" + (kind ? " " + kind : "");
+}
+
+function loadVocab() {
+  chrome.runtime.sendMessage(
+    {
+      type: "vocab-list",
+      filter: {
+        search: vocabState.search,
+        targetLang: vocabState.targetLang,
+        sortBy: vocabState.sortBy,
+      },
+    },
+    (resp) => {
+      if (chrome.runtime.lastError) {
+        setVocabStatus("加载失败：" + chrome.runtime.lastError.message, "err");
+        return;
+      }
+      if (resp && resp.ok) {
+        vocabState.items = resp.items || [];
+        vocabState.total = resp.total || 0;
+        renderVocabList();
+      } else {
+        setVocabStatus("加载失败：" + ((resp && resp.error) || "未知错误"), "err");
+      }
+    }
+  );
+}
+
+function renderVocabList() {
+  vocabListEl.innerHTML = "";
+  const showing = vocabState.items.length;
+  // summary 同步先更新
+  vocabSummaryEl.textContent = showing
+    ? `显示 ${showing} 条`
+    : (vocabState.search || vocabState.targetLang
+        ? "当前筛选条件下没有匹配项。"
+        : "暂无收藏。在划词翻译气泡上点击 ☆ 或按 S 键即可添加。");
+
+  if (!showing) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = vocabState.search || vocabState.targetLang
+      ? "没有匹配的生词。"
+      : "暂无生词收藏。";
+    vocabListEl.appendChild(empty);
+    return;
+  }
+
+  for (const item of vocabState.items) {
+    vocabListEl.appendChild(renderVocabItem(item));
+  }
+}
+
+function renderVocabItem(item) {
+  const wrap = document.createElement("div");
+  wrap.className = "vocab-item";
+  if (vocabState.expanded.has(item.id)) wrap.classList.add("expanded");
+
+  const row = document.createElement("div");
+  row.className = "vocab-row";
+
+  const word = document.createElement("div");
+  word.className = "vocab-word";
+  word.textContent = item.word;
+  row.appendChild(word);
+
+  const arrow = document.createElement("div");
+  arrow.className = "vocab-arrow";
+  arrow.textContent = "→";
+  row.appendChild(arrow);
+
+  const trans = document.createElement("div");
+  trans.className = "vocab-translation";
+  trans.textContent = item.translation || "（无译文）";
+  row.appendChild(trans);
+
+  const actions = document.createElement("div");
+  actions.className = "vocab-actions-cell";
+
+  if (hasDictPayload(item.dict)) {
+    const detailBtn = document.createElement("button");
+    detailBtn.className = "subtle";
+    detailBtn.textContent = wrap.classList.contains("expanded") ? "收起" : "详情";
+    detailBtn.addEventListener("click", () => {
+      if (vocabState.expanded.has(item.id)) vocabState.expanded.delete(item.id);
+      else vocabState.expanded.add(item.id);
+      renderVocabList();
+    });
+    actions.appendChild(detailBtn);
+  }
+
+  const noteBtn = document.createElement("button");
+  noteBtn.className = "subtle";
+  noteBtn.textContent = "备注";
+  noteBtn.addEventListener("click", () => {
+    vocabState.editingNote = vocabState.editingNote === item.id ? null : item.id;
+    renderVocabList();
+  });
+  actions.appendChild(noteBtn);
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "subtle";
+  delBtn.style.color = "#b91c1c";
+  delBtn.textContent = "删除";
+  delBtn.addEventListener("click", () => {
+    if (!confirm(`确定删除 "${item.word}"？`)) return;
+    chrome.runtime.sendMessage({ type: "vocab-remove", id: item.id }, () => {
+      void chrome.runtime.lastError;
+      loadVocab();
+    });
+  });
+  actions.appendChild(delBtn);
+
+  row.appendChild(actions);
+  wrap.appendChild(row);
+
+  const meta = document.createElement("div");
+  meta.className = "vocab-meta";
+  const langPill = document.createElement("span");
+  langPill.className = "vocab-pill";
+  langPill.textContent = (item.sourceLang || "auto") + " → " + (item.targetLang || "");
+  meta.appendChild(langPill);
+  const time = document.createElement("span");
+  time.textContent = fmtTime(item.createdAt);
+  meta.appendChild(time);
+  if (item.sourceUrl) {
+    const link = document.createElement("a");
+    link.className = "vocab-source-link";
+    link.href = item.sourceUrl;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = item.sourceTitle || item.sourceUrl;
+    meta.appendChild(link);
+  }
+  wrap.appendChild(meta);
+
+  if (item.context) {
+    const ctx = document.createElement("div");
+    ctx.className = "vocab-context";
+    ctx.textContent = item.context;
+    wrap.appendChild(ctx);
+  }
+
+  const noteRow = document.createElement("div");
+  noteRow.className = "vocab-note-row";
+  if (vocabState.editingNote === item.id) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "vocab-note-input";
+    input.placeholder = "备注…（Enter 保存，Esc 取消）";
+    input.value = item.note || "";
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveVocabNote(item.id, input.value);
+      } else if (e.key === "Escape") {
+        vocabState.editingNote = null;
+        renderVocabList();
+      }
+    });
+    input.addEventListener("blur", () => {
+      // blur 也保存（用户点别处）
+      if (vocabState.editingNote === item.id) {
+        saveVocabNote(item.id, input.value);
+      }
+    });
+    noteRow.appendChild(input);
+    setTimeout(() => input.focus(), 0);
+  } else if (item.note) {
+    const label = document.createElement("span");
+    label.className = "label";
+    label.textContent = "备注：";
+    noteRow.appendChild(label);
+    const txt = document.createElement("span");
+    txt.textContent = item.note;
+    noteRow.appendChild(txt);
+  }
+  if (noteRow.childNodes.length) wrap.appendChild(noteRow);
+
+  if (vocabState.expanded.has(item.id) && hasDictPayload(item.dict)) {
+    wrap.appendChild(renderVocabDictDetail(item));
+  }
+
+  return wrap;
+}
+
+function saveVocabNote(id, note) {
+  vocabState.editingNote = null;
+  chrome.runtime.sendMessage(
+    { type: "vocab-update-note", id, note: String(note || "") },
+    () => {
+      void chrome.runtime.lastError;
+      // 本地直接改一下避免再发一次 list
+      const it = vocabState.items.find((x) => x.id === id);
+      if (it) it.note = String(note || "");
+      renderVocabList();
+    }
+  );
+}
+
+function hasDictPayload(dict) {
+  if (!dict) return false;
+  return !!(
+    (dict.phonetics && dict.phonetics.length) ||
+    (dict.explains && dict.explains.length) ||
+    (dict.definitions && dict.definitions.length) ||
+    (dict.examples && dict.examples.length) ||
+    (dict.webExplains && dict.webExplains.length) ||
+    (dict.wordforms && dict.wordforms.length)
+  );
+}
+
+function renderVocabDictDetail(item) {
+  const wrap = document.createElement("div");
+  wrap.className = "vocab-detail";
+  const dict = item.dict || {};
+
+  const addLine = (cls, text) => {
+    const d = document.createElement("div");
+    d.className = cls;
+    d.textContent = text;
+    wrap.appendChild(d);
+  };
+
+  if (Array.isArray(dict.phonetics) && dict.phonetics.length) {
+    const ph = dict.phonetics
+      .map((p) => (p.region ? p.region + " " : "") + "/" + p.ipa + "/")
+      .join("   ");
+    addLine("dict-line dict-phonetic", ph);
+  }
+
+  if (Array.isArray(dict.explains) && dict.explains.length) {
+    addLine("dict-section", "释义");
+    for (const e of dict.explains) addLine("dict-line", e);
+  }
+
+  if (Array.isArray(dict.definitions) && dict.definitions.length) {
+    addLine("dict-section", "释义");
+    for (const d of dict.definitions) addLine("dict-line", d);
+  }
+
+  if (Array.isArray(dict.wordforms) && dict.wordforms.length) {
+    addLine("dict-section", "词形");
+    for (const wf of dict.wordforms) addLine("dict-line", wf);
+  }
+
+  if (Array.isArray(dict.webExplains) && dict.webExplains.length) {
+    addLine("dict-section", "网络");
+    for (const w of dict.webExplains) {
+      addLine("dict-line", w.key + " — " + (w.values || []).join("；"));
+    }
+  }
+
+  if (Array.isArray(dict.examples) && dict.examples.length) {
+    addLine("dict-section", "例句");
+    for (const ex of dict.examples) {
+      const exWrap = document.createElement("div");
+      exWrap.className = "dict-example";
+      const src = document.createElement("div");
+      src.textContent = ex.src;
+      exWrap.appendChild(src);
+      if (ex.tgt) {
+        const tgt = document.createElement("div");
+        tgt.style.color = "#6b7280";
+        tgt.textContent = ex.tgt;
+        exWrap.appendChild(tgt);
+      }
+      wrap.appendChild(exWrap);
+    }
+  }
+
+  return wrap;
+}
+
+// 搜索框 200ms 去抖
+let vocabSearchTimer = null;
+vocabSearchEl.addEventListener("input", () => {
+  if (vocabSearchTimer) clearTimeout(vocabSearchTimer);
+  vocabSearchTimer = setTimeout(() => {
+    vocabState.search = vocabSearchEl.value.trim();
+    loadVocab();
+  }, 200);
+});
+vocabLangEl.addEventListener("change", () => {
+  vocabState.targetLang = vocabLangEl.value;
+  loadVocab();
+});
+vocabSortEl.addEventListener("change", () => {
+  vocabState.sortBy = vocabSortEl.value;
+  loadVocab();
+});
+
+// 导出工具
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+function csvEscape(s) {
+  s = String(s == null ? "" : s);
+  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportFilename(ext) {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `vocabulary-${y}${m}${day}.${ext}`;
+}
+
+function fetchAllVocab(cb) {
+  chrome.runtime.sendMessage({ type: "vocab-export" }, (resp) => {
+    if (chrome.runtime.lastError) {
+      setVocabStatus("导出失败：" + chrome.runtime.lastError.message, "err");
+      return;
+    }
+    if (resp && resp.ok) cb(resp.data || { items: [] });
+    else setVocabStatus("导出失败：" + ((resp && resp.error) || "未知错误"), "err");
+  });
+}
+
+$("vocab-export-json").addEventListener("click", () => {
+  fetchAllVocab((data) => {
+    if (!data.items || !data.items.length) {
+      setVocabStatus("生词本为空，无可导出内容", "err");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    downloadBlob(blob, exportFilename("json"));
+    setVocabStatus(`已导出 ${data.items.length} 条 (JSON)`, "ok");
+  });
+});
+
+$("vocab-export-csv").addEventListener("click", () => {
+  fetchAllVocab((data) => {
+    if (!data.items || !data.items.length) {
+      setVocabStatus("生词本为空，无可导出内容", "err");
+      return;
+    }
+    const header = ["word", "translation", "phonetic", "sourceLang", "targetLang", "note", "sourceUrl", "createdAt"];
+    const lines = [header.join(",")];
+    for (const it of data.items) {
+      const phon =
+        (it.dict && Array.isArray(it.dict.phonetics) && it.dict.phonetics[0] && it.dict.phonetics[0].ipa) || "";
+      const iso = it.createdAt ? new Date(it.createdAt).toISOString() : "";
+      lines.push([
+        csvEscape(it.word),
+        csvEscape(it.translation),
+        csvEscape(phon),
+        csvEscape(it.sourceLang),
+        csvEscape(it.targetLang),
+        csvEscape(it.note),
+        csvEscape(it.sourceUrl),
+        csvEscape(iso),
+      ].join(","));
+    }
+    // BOM 让 Excel 正确识别 UTF-8
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    downloadBlob(blob, exportFilename("csv"));
+    setVocabStatus(`已导出 ${data.items.length} 条 (CSV)`, "ok");
+  });
+});
+
+$("vocab-export-anki").addEventListener("click", () => {
+  fetchAllVocab((data) => {
+    if (!data.items || !data.items.length) {
+      setVocabStatus("生词本为空，无可导出内容", "err");
+      return;
+    }
+    const lines = [];
+    for (const it of data.items) {
+      const front = it.word;
+      const parts = [];
+      const phon =
+        (it.dict && Array.isArray(it.dict.phonetics) && it.dict.phonetics[0] && it.dict.phonetics[0].ipa) || "";
+      if (phon) parts.push("/" + phon + "/");
+      if (it.translation) parts.push(it.translation);
+      const explains = (it.dict && Array.isArray(it.dict.explains)) ? it.dict.explains : [];
+      for (const e of explains) parts.push("· " + e);
+      const defs = (it.dict && Array.isArray(it.dict.definitions)) ? it.dict.definitions : [];
+      for (const d of defs) parts.push("· " + d);
+      if (it.note) parts.push("📝 " + it.note);
+      const back = parts.join("<br>").replace(/\t/g, " ").replace(/\r?\n/g, "<br>");
+      lines.push(front.replace(/\t/g, " ") + "\t" + back);
+    }
+    const blob = new Blob([lines.join("\r\n")], { type: "text/tab-separated-values;charset=utf-8" });
+    downloadBlob(blob, exportFilename("tsv"));
+    setVocabStatus(`已导出 ${data.items.length} 条 (Anki TSV)`, "ok");
+  });
+});
+
+$("vocab-import-btn").addEventListener("click", () => {
+  vocabImportFile.value = "";
+  vocabImportFile.click();
+});
+
+vocabImportFile.addEventListener("change", () => {
+  const f = vocabImportFile.files && vocabImportFile.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try { parsed = JSON.parse(reader.result); }
+    catch (e) {
+      setVocabStatus("导入失败：JSON 解析错误", "err");
+      return;
+    }
+    if (!parsed || !Array.isArray(parsed.items)) {
+      setVocabStatus("导入失败：文件结构不合法（需要 {version, items: []}）", "err");
+      return;
+    }
+    const count = parsed.items.length;
+    if (!confirm(`将导入 ${count} 条生词（已存在的会跳过）。继续吗？`)) return;
+    setVocabStatus("导入中…");
+    chrome.runtime.sendMessage(
+      { type: "vocab-import", data: parsed, mode: "merge" },
+      (resp) => {
+        if (chrome.runtime.lastError) {
+          setVocabStatus("导入失败：" + chrome.runtime.lastError.message, "err");
+          return;
+        }
+        if (resp && resp.ok) {
+          setVocabStatus(`导入完成：新增 ${resp.added} 条，跳过 ${resp.skipped} 条`, "ok");
+          loadVocab();
+        } else {
+          setVocabStatus("导入失败：" + ((resp && resp.error) || "未知错误"), "err");
+        }
+      }
+    );
+  };
+  reader.onerror = () => setVocabStatus("读取文件失败", "err");
+  reader.readAsText(f);
+});
+
+$("vocab-clear-btn").addEventListener("click", () => {
+  if (!confirm("确定清空全部生词收藏？此操作不可撤销，建议先导出 JSON 备份。")) return;
+  chrome.runtime.sendMessage({ type: "vocab-clear-all" }, (resp) => {
+    if (chrome.runtime.lastError) {
+      setVocabStatus("失败：" + chrome.runtime.lastError.message, "err");
+      return;
+    }
+    if (resp && resp.ok) {
+      setVocabStatus(`已清空 ${resp.cleared} 条`, "ok");
+      loadVocab();
+    } else {
+      setVocabStatus("失败：" + ((resp && resp.error) || "未知错误"), "err");
+    }
+  });
+});
+
 // ===== 启动 =====
 loadPrefsToUI();
 loadRules();
 loadCacheStats();
+loadVocab();
 applyRoute();

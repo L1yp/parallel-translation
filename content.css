@@ -214,3 +214,39 @@
   line-height: 1.5;
   color: #cbd5e1;
 }
+
+/* —— 生词本：气泡上的收藏星标 —— */
+.itl-sel-star {
+  background: transparent;
+  border: none;
+  color: #d1d5db;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 4px;
+  margin-left: 4px;
+  user-select: none;
+  pointer-events: auto;
+  transition: color 0.15s, transform 0.15s;
+  font-family: inherit;
+}
+.itl-sel-star:hover {
+  color: #fbbf24;
+  transform: scale(1.15);
+}
+.itl-sel-star.starred {
+  color: #fbbf24;
+}
+.itl-sel-star.starred:hover {
+  color: #f59e0b;
+}
+.itl-sel-star.itl-sel-star-floating {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  margin-left: 0;
+}
+/* 普通模式气泡里，星标浮在右上角；让气泡留出一点右内边距 */
+.itl-selection-bubble.itl-selection-done:not(.itl-selection-dict):not(.itl-selection-error) {
+  padding-right: 26px;
+}

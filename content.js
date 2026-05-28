@@ -447,6 +447,167 @@
     }
   }
 
+  // —— 生词本（收藏星标）————————————————————————————————————
+  // 划词气泡显示后挂一个 ☆/★ 按钮，点击或按 S 键收藏 / 取消收藏。
+  // 数据走 background → vocab.js（IndexedDB），content.js 不直接持久化。
+
+  const VOCAB_MAX_WORD_LEN = 200;
+
+  function vocabCheckRemote(word, tgtLang) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: "vocab-check", word, targetLang: tgtLang },
+        (resp) => {
+          if (chrome.runtime.lastError) return resolve({ exists: false });
+          resolve(resp && resp.ok ? { exists: !!resp.exists, id: resp.id || null } : { exists: false });
+        }
+      );
+    });
+  }
+
+  function vocabAddRemote(payload) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "vocab-add", payload }, (resp) => {
+        if (chrome.runtime.lastError) return resolve({ ok: false });
+        resolve(resp || { ok: false });
+      });
+    });
+  }
+
+  function vocabRemoveRemote(word, tgtLang) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: "vocab-remove-by-word", word, targetLang: tgtLang },
+        (resp) => {
+          if (chrome.runtime.lastError) return resolve({ ok: false });
+          resolve(resp || { ok: false });
+        }
+      );
+    });
+  }
+
+  function isVocabEligible(text) {
+    if (!text) return false;
+    const t = text.trim();
+    if (t.length < 1) return false;
+    if (t.length > VOCAB_MAX_WORD_LEN) return false;
+    return true;
+  }
+
+  // 选区上下文：取选区所在块的 textContent，前后各取 ~80 字符。
+  // 跨节点 / Shadow Root / 富文本失败时回退空字符串，不让收藏功能崩。
+  function extractSelectionContext(text) {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return "";
+      const range = sel.getRangeAt(0);
+      let anchor = range.startContainer;
+      if (anchor && anchor.nodeType === 3) anchor = anchor.parentElement;
+      if (!anchor || typeof anchor.closest !== "function") return "";
+      const block = anchor.closest(BLOCK_SELECTOR) || anchor.closest("body") || anchor;
+      const full = (block && block.textContent) || "";
+      const idx = full.indexOf(text);
+      if (idx < 0) return "";
+      const WIN = 80;
+      const left = Math.max(0, idx - WIN);
+      const right = Math.min(full.length, idx + text.length + WIN);
+      let snip = full.slice(left, right).replace(/\s+/g, " ").trim();
+      if (left > 0) snip = "…" + snip;
+      if (right < full.length) snip = snip + "…";
+      return snip;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function makeStarButton(bubble, floating) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "itl-sel-star" + (floating ? " itl-sel-star-floating" : "");
+    btn.title = "收藏到生词本（按 S）";
+    btn.textContent = "☆";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      toggleVocabStar(bubble);
+    });
+    btn.addEventListener("mousedown", (e) => {
+      // 防止冒泡到 document mousedown 触发 hideSelectionBubble
+      e.stopPropagation();
+    });
+    return btn;
+  }
+
+  function setStarVisual(btn, starred) {
+    if (!btn) return;
+    btn.classList.toggle("starred", !!starred);
+    btn.textContent = starred ? "★" : "☆";
+    btn.title = starred ? "已收藏（点击移除，或按 S）" : "收藏到生词本（按 S）";
+  }
+
+  // 调用时机：translateRemote 成功后，气泡内容已渲染完。
+  function attachStarToBubble(bubble) {
+    const meta = bubble.__itlVocab;
+    if (!meta || !meta.eligible) return;
+    let btn;
+    const headRow = bubble.querySelector(".itl-sel-headword-row");
+    if (headRow) {
+      // 词典模式：插到 headRow 末尾（与发音按钮同行）
+      btn = makeStarButton(bubble, false);
+      headRow.appendChild(btn);
+    } else {
+      // 普通模式：浮在气泡右上角
+      btn = makeStarButton(bubble, true);
+      bubble.appendChild(btn);
+    }
+    meta.starBtn = btn;
+    setStarVisual(btn, false);
+    vocabCheckRemote(meta.word, meta.targetLang).then((r) => {
+      if (!bubble.isConnected || meta !== bubble.__itlVocab) return;
+      // 用户已经点过就不再被后端检查回填覆盖
+      if (meta.userTouched) return;
+      meta.starred = !!r.exists;
+      setStarVisual(btn, meta.starred);
+    });
+  }
+
+  function toggleVocabStar(bubble) {
+    const meta = bubble && bubble.__itlVocab;
+    if (!meta || !meta.eligible) return;
+    const btn = meta.starBtn;
+    const next = !meta.starred;
+    meta.userTouched = true;
+    meta.starred = next;
+    setStarVisual(btn, next);
+    if (next) {
+      vocabAddRemote({
+        word: meta.word,
+        translation: meta.translation,
+        sourceLang: meta.sourceLang,
+        targetLang: meta.targetLang,
+        dict: meta.dict,
+        sourceUrl: location.href,
+        sourceTitle: document.title,
+        context: meta.context,
+      }).then((resp) => {
+        if (!bubble.isConnected || meta !== bubble.__itlVocab) return;
+        if (!resp || !resp.ok) {
+          // 回滚视觉
+          meta.starred = false;
+          setStarVisual(btn, false);
+        }
+      });
+    } else {
+      vocabRemoveRemote(meta.word, meta.targetLang).then((resp) => {
+        if (!bubble.isConnected || meta !== bubble.__itlVocab) return;
+        if (!resp || !resp.ok) {
+          meta.starred = true;
+          setStarVisual(btn, true);
+        }
+      });
+    }
+  }
+
   // —— 划词翻译气泡 ——————————————————————————————————————————
 
   let selectionBubble = null;
@@ -513,6 +674,8 @@
 
   function fetchSelectionTranslation(bubble, text, rect, fallbackXY) {
     const wantDict = isSingleWord(text);
+    // 上下文要在 selection 还在的时候抓；用户点 "翻译" 按钮后才进这里时 selection 可能已经丢
+    const context = extractSelectionContext(text);
     translateRemote(text, { wantDict })
       .then((result) => {
         if (!bubble.isConnected) return;
@@ -524,6 +687,20 @@
         } else {
           bubble.textContent = out || "（无内容）";
         }
+        // 生词本元数据 + 星标按钮（仅在词长度合规时挂）
+        bubble.__itlVocab = {
+          eligible: isVocabEligible(text),
+          word: text,
+          translation: out,
+          dict: (wantDict && result.dict) || null,
+          sourceLang: "auto",
+          targetLang: targetLang,
+          context,
+          starred: false,
+          starBtn: null,
+          userTouched: false,
+        };
+        attachStarToBubble(bubble);
         positionSelectionBubble(bubble, rect, fallbackXY);
       })
       .catch((err) => {
@@ -705,7 +882,22 @@
   }
 
   function onSelectionKeyDown(e) {
-    if (e.key === "Escape" && selectionBubble) hideSelectionBubble();
+    if (e.key === "Escape" && selectionBubble) {
+      hideSelectionBubble();
+      return;
+    }
+    // S 键：气泡可见时切换收藏。要躲开 IME / 输入框 / 系统快捷键
+    if ((e.key === "s" || e.key === "S") && selectionBubble) {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (t && editableKind(t)) return;
+      const meta = selectionBubble.__itlVocab;
+      if (!meta || !meta.eligible) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleVocabStar(selectionBubble);
+    }
   }
 
   let selectionListenerAttached = false;

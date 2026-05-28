@@ -13,6 +13,19 @@ import {
   cacheStats,
   cacheClearAll,
 } from "./cache.js";
+import {
+  normalizeWord,
+  vocabAdd,
+  vocabRemove,
+  vocabRemoveByWord,
+  vocabCheck,
+  vocabList,
+  vocabUpdateNote,
+  vocabClearAll,
+  vocabExportAll,
+  vocabImport,
+  vocabStats,
+} from "./vocab.js";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "translate") {
@@ -43,6 +56,68 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "cache-clear") {
     cacheClearAll()
       .then(() => sendResponse({ ok: true, count: 0, oldestAt: null, newestAt: null }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+
+  // —— 生词本（vocab.js）————————————————————————————————
+  if (msg.type === "vocab-add") {
+    vocabAdd(msg.payload || {})
+      .then((r) => sendResponse({ ok: true, added: r.added, id: r.id, item: r.item }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-remove") {
+    vocabRemove(msg.id)
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-remove-by-word") {
+    vocabRemoveByWord(normalizeWord(msg.normalized || msg.word || ""), msg.targetLang || "")
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-check") {
+    vocabCheck(normalizeWord(msg.normalized || msg.word || ""), msg.targetLang || "")
+      .then((r) => sendResponse({ ok: true, exists: r.exists, id: r.id || null }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-list") {
+    vocabList(msg.filter || {})
+      .then((r) => sendResponse({ ok: true, items: r.items, total: r.total }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-update-note") {
+    vocabUpdateNote(msg.id, msg.note || "")
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-clear-all") {
+    vocabClearAll()
+      .then((cleared) => sendResponse({ ok: true, cleared }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-export") {
+    vocabExportAll()
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-import") {
+    vocabImport(msg.data || {}, msg.mode || "merge")
+      .then((r) => sendResponse({ ok: true, added: r.added, skipped: r.skipped }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-stats") {
+    vocabStats()
+      .then((s) => sendResponse({ ok: true, ...s }))
       .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
     return true;
   }
