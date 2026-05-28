@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <style>
       body {
-        width: 260px;
+        width: 280px;
         margin: 0;
         padding: 16px;
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -20,7 +20,9 @@
         display: block;
         margin-bottom: 4px;
       }
-      select {
+      select,
+      input[type="text"],
+      input[type="password"] {
         width: 100%;
         padding: 6px 8px;
         font-size: 13px;
@@ -28,6 +30,8 @@
         border-radius: 6px;
         margin-bottom: 12px;
         background: #fff;
+        box-sizing: border-box;
+        font-family: inherit;
       }
       .row-check {
         display: flex;
@@ -53,11 +57,40 @@
       button:hover {
         background: #1d4ed8;
       }
+      button.secondary {
+        background: #f3f4f6;
+        color: #374151;
+        margin-bottom: 10px;
+      }
+      button.secondary:hover {
+        background: #e5e7eb;
+      }
       .hint {
         font-size: 11px;
         color: #9ca3af;
         margin-top: 10px;
         line-height: 1.5;
+      }
+      .section {
+        border-top: 1px solid #e5e7eb;
+        margin-top: 14px;
+        padding-top: 12px;
+      }
+      .section.hidden {
+        display: none;
+      }
+      .test-status {
+        font-size: 11px;
+        line-height: 1.5;
+        margin: -6px 0 8px;
+        min-height: 14px;
+        color: #6b7280;
+      }
+      .test-status.ok {
+        color: #16a34a;
+      }
+      .test-status.err {
+        color: #dc2626;
       }
       kbd {
         font-family: ui-monospace, "SF Mono", Consolas, monospace;
@@ -84,32 +117,51 @@
       <option value="es">Español</option>
     </select>
 
-    <label for="style">译文样式</label>
-    <select id="style">
-      <option value="default">默认（蓝色虚线）</option>
-      <option value="underline">下划线</option>
-      <option value="blur">模糊（悬停显示）</option>
-      <option value="bold">加粗</option>
-      <option value="card">卡片</option>
+    <label for="provider">翻译服务</label>
+    <select id="provider">
+      <option value="google">Google（免费，无对齐高亮）</option>
+      <option value="microsoft">Microsoft（支持词对齐高亮）</option>
     </select>
 
-    <label for="hover">悬停翻译</label>
-    <select id="hover">
-      <option value="off">关闭</option>
-      <option value="alt">按住 Alt + 悬停</option>
-      <option value="ctrl">按住 Ctrl + 悬停</option>
-      <option value="shift">按住 Shift + 悬停</option>
-    </select>
+    <div id="ms-config" class="section hidden">
+      <label for="ms-key">Microsoft API Key</label>
+      <input type="password" id="ms-key" placeholder="32 位密钥" autocomplete="off" />
 
-    <label class="row-check">
-      <input type="checkbox" id="observer" />
-      自动翻译动态加载的内容
-    </label>
+      <label for="ms-region">Region（资源所在区域）</label>
+      <input type="text" id="ms-region" placeholder="eastasia / japaneast / ..." />
+
+      <button id="ms-test" class="secondary">测试连接</button>
+      <div id="ms-test-status" class="test-status"></div>
+    </div>
+
+    <div class="section">
+      <label for="style">译文样式</label>
+      <select id="style">
+        <option value="default">默认（蓝色虚线）</option>
+        <option value="underline">下划线</option>
+        <option value="blur">模糊（悬停显示）</option>
+        <option value="bold">加粗</option>
+        <option value="card">卡片</option>
+      </select>
+
+      <label for="hover">悬停翻译</label>
+      <select id="hover">
+        <option value="off">关闭</option>
+        <option value="alt">按住 Alt + 悬停</option>
+        <option value="ctrl">按住 Ctrl + 悬停</option>
+        <option value="shift">按住 Shift + 悬停</option>
+      </select>
+
+      <label class="row-check">
+        <input type="checkbox" id="observer" />
+        自动翻译动态加载的内容
+      </label>
+    </div>
 
     <button id="go">翻译 / 还原</button>
     <p class="hint">
       快捷键 <kbd>Alt</kbd>+<kbd>T</kbd> 也能开关整页翻译。<br />
-      安装/更新后请刷新已打开的页面。
+      切换服务或更新 Key 后需重新点"翻译 / 还原"。
     </p>
     <script src="popup.js"></script>
   </body>

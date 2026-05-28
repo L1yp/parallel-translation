@@ -4,7 +4,11 @@
   "version": "1.1.0",
   "description": "双语对照网页翻译：原文在上，译文在下，使用 Google 翻译接口。",
   "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["https://translate.googleapis.com/*"],
+  "host_permissions": [
+    "https://translate.googleapis.com/*",
+    "https://api.cognitive.microsofttranslator.com/*",
+    "https://*.api.cognitive.microsofttranslator.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

@@ -1,18 +1,36 @@
 // background.js —— 后台 Service Worker（ES module）
-// 职责：唯一的翻译 fetch 入口 + 快捷键转发。
-// 内容脚本通过 chrome.runtime.sendMessage({type:"translate"}) 委托翻译，
-// 这样能绕过部分页面 CSP/CORS 限制，并集中处理网络请求。
+// 职责：唯一的翻译 fetch 入口 + 快捷键转发 + 敏感配置（API Key）注入。
+// content.js 只传 provider 名 + 文本 + 目标语言；Key 等敏感信息由 background 从 storage 读取，
+// 永远不进入页面上下文，避免被网页脚本嗅探。
 
 import { translate, DEFAULT_PROVIDER } from "./providers/index.js";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "translate") {
-    translate(msg.provider || DEFAULT_PROVIDER, msg.text, msg.targetLang)
-      .then((translated) => sendResponse({ ok: true, translated }))
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    handleTranslate(msg)
+      .then((payload) => sendResponse({ ok: true, ...payload }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
     return true; // 异步响应，必须返回 true
   }
 });
+
+async function handleTranslate(msg) {
+  const provider = msg.provider || DEFAULT_PROVIDER;
+  const config = await loadProviderConfig(provider);
+  const result = await translate(provider, msg.text, msg.targetLang, config);
+  return {
+    translated: result.text || "",
+    alignment: result.alignment || null,
+  };
+}
+
+async function loadProviderConfig(provider) {
+  if (provider === "microsoft") {
+    const s = await chrome.storage.sync.get(["msKey", "msRegion", "msEndpoint"]);
+    return { key: s.msKey || "", region: s.msRegion || "eastasia", endpoint: s.msEndpoint || "" };
+  }
+  return null;
+}
 
 // 快捷键：转发给当前 tab 的 content.js 切换翻译。
 chrome.commands.onCommand.addListener(async (command) => {

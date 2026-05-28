@@ -12,7 +12,7 @@
 
 - **`manifest.json`** —— MV3 配置。声明权限（`activeTab` / `scripting` / `storage`）、host 权限（仅 `translate.googleapis.com`）、后台 Service Worker（`type: "module"`）、`<all_urls>` 上的内容脚本注入（`document_idle`）、`commands`（`Alt+T` 切换整页翻译）。
 - **`background.js`** —— Service Worker（ES module）。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。也监听 `chrome.commands.onCommand`，把快捷键转成 `toggle` 消息发给当前 tab。
-- **`providers/`** —— 翻译服务实现。`providers/google.js` 是当前唯一的 provider，`providers/index.js` 提供 `translate(name, text, targetLang)` 路由。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
+- **`providers/`** —— 翻译服务实现。`providers/index.js` 提供 `translate(name, text, targetLang, config)` 路由，返回 `{text, alignment?}`。当前两个 provider：`google.js`（免费，不返回 alignment）和 `microsoft.js`（Azure Translator，`includeAlignment=true` 返回字符级对齐）。**敏感配置（API Key 等）由 background 从 `chrome.storage.sync` 读取后注入 provider，永远不进 content.js 上下文**。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
 - **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
 - **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。
 
@@ -59,6 +59,15 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 
 `content.css` 内置 5 种：`default` / `underline` / `blur` / `bold` / `card`。`style` 字段存 storage，content.js 在插入 `.itl-translation` 时挂 `.itl-style-xxx`。切换样式时 `refreshExistingStyles()` 会更新已插入的节点，无需还原重译。
 
+## 词对齐高亮（仅 Microsoft provider）
+
+仅当 provider 返回 `alignment` 数组时启用，结构为 `[{srcStart, srcEnd, tgtStart, tgtEnd}, ...]`（端点为 inclusive，buildAlignedFragment 内部转 exclusive）。
+
+- **groupSeq 全局递增前缀**：每段一个 `g{n}-{idx}` 前缀，避免不同段的同 idx 误命中。group id 通过 `data-itl-group` 属性挂在 span 上，用空格分隔多 group，匹配用 attribute selector `~=`。
+- **原文切 span 仅限纯文本元素**：`isPureTextElement(el)` 判断 `el.children.length === 0`。含 `<strong>`/`<a>` 等内嵌格式的段落只切译文，不动原文 DOM —— 避免破坏第三方页面格式。切过 span 的原文，原始 childNodes 存 `originalChildren` WeakMap，`turnOff()` 时还原。
+- **联动高亮**：`mouseover` 在 `.itl-tok` 上触发，先 `clearActive()` 再按 group 把同 id 的 spans 全加 `.itl-tok-active`。Google 翻译走老路径（`textContent` 单 textNode），不会有 `.itl-tok`，hover 事件直接跳过。
+- **Google provider 不要伪造 alignment**：路由约定。content.js 用 `alignment && alignment.length` 判断是否启用对齐分支。
+
 ## 开发与调试
 
 无构建步骤、无依赖、无测试。开发循环：
@@ -77,6 +86,8 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 - **MV3 Service Worker 会休眠**：不要在 background.js 里持有跨消息的全局状态，每次 `onMessage` 都要按"冷启动"假设来写。
 - **不要把样式预设的 class 加到原文 `el` 上**：`.itl-style-xxx` 只挂在 `.itl-translation` 子节点上；挂到原文节点会污染原网页样式且 `turnOff()` 不会清。
 - **新增 provider 时不要在 content.js 里加分支**：路由集中在 `providers/index.js`。content.js 只透传 `provider` 字符串。
+- **API Key 永远不进 content.js**：popup 写入 `chrome.storage.sync`，background 在 `handleTranslate` 里读取后传入 provider。content.js 不应感知任何凭证字段。
+- **provider 接口签名**：`translate(text, targetLang, config?) -> {text, alignment?}`。不返回 alignment 的 provider 必须返回 `{text}` 或 `{text, alignment: undefined}`，不要返回字符串。
 
 ## 文件清单
 
@@ -84,8 +95,9 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 |------|------|
 | `manifest.json` | MV3 配置（含 `commands` 快捷键、`type: "module"`） |
 | `background.js` | Service Worker（ES module），翻译 fetch 入口 + 快捷键转发 |
-| `providers/index.js` | provider 路由表 |
-| `providers/google.js` | Google 免费翻译实现 |
+| `providers/index.js` | provider 路由表（返回 `{text, alignment?}`） |
+| `providers/google.js` | Google 免费翻译实现（无 alignment） |
+| `providers/microsoft.js` | Microsoft Translator（Azure），支持字符级 alignment |
 | `content.js` | DOM 遍历、并发调度、译文插入/清理、MutationObserver、悬停翻译 |
 | `content.css` | `.itl-translation` 译文块样式 + 5 种样式预设 |
 | `popup.html` | 弹窗 UI（含内联样式） |
