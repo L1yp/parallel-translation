@@ -3,10 +3,12 @@
 
 import { translate as googleTranslate } from "./google.js";
 import { translate as microsoftTranslate } from "./microsoft.js";
+import { translate as youdaoTranslate } from "./youdao.js";
 
 const PROVIDERS = {
   google: googleTranslate,
   microsoft: microsoftTranslate,
+  youdao: youdaoTranslate,
 };
 
 export const DEFAULT_PROVIDER = "google";

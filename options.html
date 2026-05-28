@@ -135,8 +135,27 @@
 
       <button id="ms-test">测试连接</button>
       <div id="ms-test-status" class="test-status"></div>
-      <div id="saved-hint" class="saved-hint"></div>
     </div>
+
+    <div class="card">
+      <h2>有道智云翻译</h2>
+      <p class="desc">
+        使用网易有道智云平台的翻译 API。需要在
+        <a href="https://ai.youdao.com/" target="_blank" rel="noopener">有道智云控制台</a>
+        创建"文本翻译"应用后获取 App Key 与 App Secret。新用户赠送约 500 万字符的免费额度。
+      </p>
+
+      <label for="yd-app-key">App Key（应用 ID）</label>
+      <input type="text" id="yd-app-key" placeholder="例如 12abc34d56ef7890" autocomplete="off" spellcheck="false" />
+
+      <label for="yd-app-secret">App Secret（应用密钥）</label>
+      <input type="password" id="yd-app-secret" placeholder="32 位密钥" autocomplete="off" spellcheck="false" />
+
+      <button id="yd-test">测试连接</button>
+      <div id="yd-test-status" class="test-status"></div>
+    </div>
+
+    <div id="saved-hint" class="saved-hint"></div>
 
     <p class="footer">
       切换翻译服务、目标语言、译文样式等常用选项请打开扩展弹窗。<br />

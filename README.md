@@ -1,6 +1,6 @@
 # 沉浸式翻译 Lite
 
-一个双语对照的 Chrome 翻译插件：原文在上，译文在下。支持 Google（免费）和 Microsoft Translator。
+一个双语对照的 Chrome 翻译插件：原文在上，译文在下。支持 Google（免费）、Microsoft Translator 和有道智云。
 
 ## 安装（加载未打包扩展）
 
@@ -23,6 +23,9 @@
 - **翻译服务**
   - **Google**（默认）：免费、无需配置
   - **Microsoft**：注册 Azure Translator 免费层（F0，每月 2M 字符），填 Key + Region 即可使用
+  - **有道智云**：注册有道智云开发者账号，新用户赠送约 500 万字符额度，填 App Key + App Secret 即可使用
+
+> Microsoft / 有道的 Key 等敏感配置在独立的设置页填写：popup 右下角点 `⚙ 设置`，或右键扩展图标 → 选项。
 - **译文样式** —— 默认（蓝色虚线）/ 下划线 / 模糊（悬停显示）/ 加粗 / 卡片
 - **悬停翻译** —— 选 `Alt` / `Ctrl` / `Shift`，按住对应键 + 鼠标悬停在段落上即可单段翻译。选「关闭」彻底拆除监听。
 - **自动翻译动态加载的内容** —— 默认开启，监听 SPA / 无限滚动新增的段落。Twitter/Reddit 触发限流可关。
@@ -33,21 +36,30 @@
 2. 直接打开 https://portal.azure.com/#create/Microsoft.CognitiveServicesTextTranslation
 3. 区域选 **East Asia**（国内访问最快），定价层选 **Free F0**
 4. 创建完成后进资源页 → 左侧"密钥和终结点" → 复制 Key 和 Region
-5. 在本扩展 popup 选「Microsoft」，填入 Key 和 Region，点"测试连接"验证
+5. 在扩展设置页选择「Microsoft」对应的卡片，填入 Key 和 Region，点"测试连接"验证
+
+### 注册有道智云（可选）
+
+1. 去 https://ai.youdao.com/ 注册账号并完成实名认证
+2. 进入控制台 → 「自然语言翻译」→「文本翻译」→「创建应用」
+3. 应用接入方式选 **API**，授权服务勾选「文本翻译服务」
+4. 创建后在应用详情里复制 **应用 ID（App Key）** 和 **应用密钥（App Secret）**
+5. 在扩展设置页找到「有道智云翻译」卡片，填入并点"测试连接"验证
 
 ## 文件说明
 
 - `manifest.json` —— 扩展配置（Manifest V3）
 - `background.js` —— 后台 Service Worker，唯一的翻译 fetch 入口，转发快捷键，注入敏感配置
-- `providers/` —— 翻译服务实现（`google.js` / `microsoft.js`）+ 路由
+- `providers/` —— 翻译服务实现（`google.js` / `microsoft.js` / `youdao.js`）+ 路由
+- `options.html` / `options.js` —— 独立设置页（API Key 等敏感配置）
 - `content.js` —— 注入网页：遍历段落 / 并发调度 / 译文插入 / MutationObserver / 悬停翻译
 - `content.css` —— 译文块样式与样式预设
 - `popup.html` / `popup.js` —— 弹窗界面与交互
 
 ## 隐私 / 安全
 
-- Microsoft API Key 存在 `chrome.storage.sync`（随 Chrome 账号同步），**不会出现在网页上下文**（只有 background.js 读取）
-- 翻译请求只发往你选的服务商（`translate.googleapis.com` 或 `api.cognitive.microsofttranslator.com`），扩展不收集、不上传任何额外数据
+- Microsoft / 有道的 API Key 与密钥存在 `chrome.storage.sync`（随 Chrome 账号同步），**不会出现在网页上下文**（只有 background.js 读取）
+- 翻译请求只发往你选的服务商（`translate.googleapis.com` / `api.cognitive.microsofttranslator.com` / `openapi.youdao.com`），扩展不收集、不上传任何额外数据
 - 如担心 `storage.sync` 跨设备同步 Key，可改用 `storage.local`（需要改一行 `popup.js` / `background.js`）
 
 ## 注意事项

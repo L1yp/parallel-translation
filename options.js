@@ -4,13 +4,18 @@
 const DEFAULTS = {
   msKey: "",
   msRegion: "eastasia",
+  ydAppKey: "",
+  ydAppSecret: "",
 };
 
 const $ = (id) => document.getElementById(id);
-const msKeyInput = $("ms-key");
-const msRegionInput = $("ms-region");
-const msTestBtn = $("ms-test");
-const msTestStatus = $("ms-test-status");
+
+const fields = {
+  msKey: $("ms-key"),
+  msRegion: $("ms-region"),
+  ydAppKey: $("yd-app-key"),
+  ydAppSecret: $("yd-app-secret"),
+};
 const savedHint = $("saved-hint");
 
 let savedHintTimer = null;
@@ -26,56 +31,57 @@ function flashSaved() {
 
 chrome.storage.sync.get(Object.keys(DEFAULTS), (res) => {
   const merged = { ...DEFAULTS, ...res };
-  msKeyInput.value = merged.msKey || "";
-  msRegionInput.value = merged.msRegion || DEFAULTS.msRegion;
+  for (const [k, el] of Object.entries(fields)) {
+    el.value = merged[k] || "";
+  }
 });
 
-function persist() {
-  const data = {
-    msKey: msKeyInput.value.trim(),
-    msRegion: msRegionInput.value.trim() || DEFAULTS.msRegion,
+function readAll() {
+  return {
+    msKey: fields.msKey.value.trim(),
+    msRegion: fields.msRegion.value.trim() || DEFAULTS.msRegion,
+    ydAppKey: fields.ydAppKey.value.trim(),
+    ydAppSecret: fields.ydAppSecret.value.trim(),
   };
-  chrome.storage.sync.set(data, flashSaved);
 }
 
-// input 即时保存；blur 时再补一次（处理 paste 后未触发 input 的边角）
-msKeyInput.addEventListener("input", persist);
-msKeyInput.addEventListener("change", persist);
-msRegionInput.addEventListener("input", persist);
-msRegionInput.addEventListener("change", persist);
+function persist() {
+  chrome.storage.sync.set(readAll(), flashSaved);
+}
 
-msTestBtn.addEventListener("click", () => {
-  msTestStatus.textContent = "测试中…";
-  msTestStatus.className = "test-status";
-  // 确保最新输入已落盘
-  chrome.storage.sync.set(
-    {
-      msKey: msKeyInput.value.trim(),
-      msRegion: msRegionInput.value.trim() || DEFAULTS.msRegion,
-    },
-    () => {
+for (const el of Object.values(fields)) {
+  el.addEventListener("input", persist);
+  el.addEventListener("change", persist);
+}
+
+// 通用测试连接：先确保最新输入已落盘，再让 background 走一次真翻译
+function bindTest(btnId, statusId, provider) {
+  const btn = $(btnId);
+  const status = $(statusId);
+  btn.addEventListener("click", () => {
+    status.textContent = "测试中…";
+    status.className = "test-status";
+    chrome.storage.sync.set(readAll(), () => {
       chrome.runtime.sendMessage(
-        {
-          type: "translate",
-          provider: "microsoft",
-          text: "Hello, world.",
-          targetLang: "zh-CN",
-        },
+        { type: "translate", provider, text: "Hello, world.", targetLang: "zh-CN" },
         (resp) => {
           if (chrome.runtime.lastError) {
-            msTestStatus.textContent = "失败：" + chrome.runtime.lastError.message;
-            msTestStatus.className = "test-status err";
+            status.textContent = "失败：" + chrome.runtime.lastError.message;
+            status.className = "test-status err";
             return;
           }
           if (resp && resp.ok) {
-            msTestStatus.textContent = `✓ ${resp.translated}`;
-            msTestStatus.className = "test-status ok";
+            status.textContent = `✓ ${resp.translated}`;
+            status.className = "test-status ok";
           } else {
-            msTestStatus.textContent = "失败：" + ((resp && resp.error) || "未知错误");
-            msTestStatus.className = "test-status err";
+            status.textContent = "失败：" + ((resp && resp.error) || "未知错误");
+            status.className = "test-status err";
           }
         }
       );
-    }
-  );
-});
+    });
+  });
+}
+
+bindTest("ms-test", "ms-test-status", "microsoft");
+bindTest("yd-test", "yd-test-status", "youdao");

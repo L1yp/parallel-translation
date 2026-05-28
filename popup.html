@@ -68,7 +68,7 @@
         margin-top: 14px;
         padding-top: 12px;
       }
-      .ms-tip {
+      .cred-tip {
         display: none;
         font-size: 11px;
         color: #b45309;
@@ -79,10 +79,10 @@
         margin: -6px 0 12px;
         line-height: 1.5;
       }
-      .ms-tip.show {
+      .cred-tip.show {
         display: block;
       }
-      .ms-tip a {
+      .cred-tip a {
         color: #b45309;
         text-decoration: underline;
         cursor: pointer;
@@ -133,10 +133,11 @@
     <select id="provider">
       <option value="google">Google（免费）</option>
       <option value="microsoft">Microsoft Translator</option>
+      <option value="youdao">有道智云</option>
     </select>
 
-    <div id="ms-tip" class="ms-tip">
-      未配置 Microsoft API Key，<a id="ms-tip-link">前往设置</a>。
+    <div id="cred-tip" class="cred-tip">
+      未配置 <span id="cred-tip-what"></span>，<a id="cred-tip-link">前往设置</a>。
     </div>
 
     <div class="section">

@@ -26,6 +26,10 @@ async function loadProviderConfig(provider) {
     const s = await chrome.storage.sync.get(["msKey", "msRegion", "msEndpoint"]);
     return { key: s.msKey || "", region: s.msRegion || "eastasia", endpoint: s.msEndpoint || "" };
   }
+  if (provider === "youdao") {
+    const s = await chrome.storage.sync.get(["ydAppKey", "ydAppSecret"]);
+    return { appKey: s.ydAppKey || "", appSecret: s.ydAppSecret || "" };
+  }
   return null;
 }
 
