@@ -273,7 +273,7 @@ function renderRulesList() {
   if (!siteRules.length) {
     const empty = document.createElement("li");
     empty.className = "empty";
-    empty.textContent = "暂无站点规则。点击右上角"添加规则"。";
+    empty.textContent = "暂无站点规则。点击右上角「添加规则」按钮新建一条。";
     rulesList.appendChild(empty);
     rulesSummary.textContent = "0 条规则";
     return;
