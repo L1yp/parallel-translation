@@ -53,10 +53,20 @@ export async function translate(text, targetLang, config, options) {
   const curtime = Math.floor(Date.now() / 1000).toString();
   const sign = await sha256Hex(appKey + truncate(text) + salt + curtime + appSecret);
   const sourceLang = (options && options.sourceLang) || "auto";
+  const wantDict = !!(options && options.wantDict);
+
+  // 有道 API 在 from=auto 时通常只返回 translation，不带 basic/web 词典字段。
+  // 想拿单词词典必须显式 from。这里按文本内容做轻量启发，仅在 wantDict 时启用。
+  let from;
+  if (sourceLang === "auto") {
+    from = (wantDict && guessYoudaoDictLang(text)) || "auto";
+  } else {
+    from = mapLang(sourceLang);
+  }
 
   const body = new URLSearchParams({
     q: text,
-    from: sourceLang === "auto" ? "auto" : mapLang(sourceLang),
+    from,
     to: mapLang(targetLang),
     appKey,
     salt,
@@ -84,11 +94,19 @@ export async function translate(text, targetLang, config, options) {
 
   const translations = Array.isArray(data.translation) ? data.translation : [];
   const out = { text: translations.join("\n") };
-  console.log("[ITL youdao] basic/web:", data.basic, data.web);
+  console.log("[ITL youdao] from:", from, "basic/web:", data.basic, data.web);
   const dict = parseYoudaoDict(data);
   console.log("[ITL youdao] parsed dict:", dict);
   if (dict) out.dict = dict;
   return out;
+}
+
+// from=auto 时基本只识别长句；对单字/单词，需要按字符内容自己判断锁 from，
+// 否则有道服务端不走词典通路，返回里也就没有 basic/web。
+function guessYoudaoDictLang(text) {
+  if (/\p{Script=Han}/u.test(text)) return "zh-CHS";
+  if (/^[A-Za-z][A-Za-z'\-]{0,30}$/.test(text)) return "en";
+  return null;
 }
 
 // 有道对单词查询会额外返回 basic（音标+词性释义）和 web（网络释义）。
