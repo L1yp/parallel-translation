@@ -109,6 +109,16 @@ export async function translate(text, targetLang, config, options) {
     }
   }
 
+  if (wantDict) {
+    const audio = {};
+    if (from !== "auto") audio.src = ttsUrl(text, youdaoToBcp47(from));
+    if (out.text) audio.tgt = ttsUrl(out.text, targetLang);
+    if (Object.keys(audio).length) {
+      dict = dict || {};
+      dict.audio = audio;
+    }
+  }
+
   if (dict) out.dict = dict;
   return out;
 }
@@ -223,13 +233,22 @@ function parseYoudaoDict(data) {
       .filter((w) => w.key && w.values.length);
     if (webExplains.length) dict.webExplains = webExplains;
   }
-  // 发音：即使 basic 缺失（有道判 isWord=false），speakUrl/tSpeakUrl 仍可能存在
-  const audio = {};
-  if (typeof data.speakUrl === "string" && data.speakUrl) audio.src = data.speakUrl;
-  if (typeof data.tSpeakUrl === "string" && data.tSpeakUrl) audio.tgt = data.tSpeakUrl;
-  if (Object.keys(audio).length) dict.audio = audio;
-
   return Object.keys(dict).length ? dict : null;
+}
+
+// 有道自带的 speakUrl/tSpeakUrl 在 <audio> 里常播不出（mime / 鉴权 / 跨域），
+// 改用 Google 非官方 TTS。源/目标语言要从 youdao 的内部代码映射回 BCP-47。
+function ttsUrl(text, lang) {
+  return "https://translate.googleapis.com/translate_tts" +
+    "?ie=UTF-8&client=tw-ob" +
+    "&q=" + encodeURIComponent(text) +
+    "&tl=" + encodeURIComponent(lang);
+}
+
+function youdaoToBcp47(code) {
+  if (code === "zh-CHS") return "zh-CN";
+  if (code === "zh-CHT") return "zh-TW";
+  return code;
 }
 
 // 常见错误码 → 中文说明，方便用户在 options 测试连接时定位问题

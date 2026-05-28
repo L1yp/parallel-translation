@@ -100,13 +100,13 @@ provider 接口里 `options.sourceLang` 走完整链路：
 
 | provider | phonetics | explains | definitions | webExplains | examples | audio |
 |---|---|---|---|---|---|---|
-| youdao   | ✅ 英/美 IPA（isWord=true 走 v3，否则 fallback 网页 #ec/#ce） | ✅ basic.explains 或 网页 fallback | — | ✅ web[] | — | ✅ speakUrl / tSpeakUrl |
+| youdao   | ✅ 英/美 IPA（isWord=true 走 v3，否则 fallback 网页 #ec/#ce） | ✅ basic.explains 或 网页 fallback | — | ✅ web[] | — | ✅ 复用 Google `translate_tts`（有道自带的 speakUrl 在 `<audio>` 常播不出，已弃用） |
 | google   | — | ✅ 解析 `data[1]`（dt=bd） | ✅ 解析 `data[12]`（dt=md） | — | ✅ 解析 `data[13]`（dt=ex，需 `stripHtml`） | ✅ 自拼 `translate_tts` URL（用 `data[2]` 检测到的源语言） |
 | microsoft | — | — | — | — | — | — |
 
 Google `dt=bd/md/ex` 只在 `wantDict` 时附加，避免长句翻译响应体翻倍。
 
-有道 `basic` / `web` 仅在 API 判 `isWord=true` 时存在（连 `become` 这种动词原型也可能被判 false）；但 `speakUrl` / `tSpeakUrl` 几乎一定有，所以 `parseYoudaoDict` 即便 basic 缺失，也会因为有 audio 字段而返回非 null dict，让 UI 至少能渲染 headword + 播放按钮 + 译文。
+有道 `basic` / `web` 仅在 API 判 `isWord=true` 时存在（连 `become` 这种动词原型也可能被判 false）。**audio 不复用有道 `speakUrl` / `tSpeakUrl`**——它们在 `<audio>` 里常播不出（mime / 鉴权 / 跨域综合作用），改为在 youdao provider 里自拼 Google `translate_tts` URL，把内部 `zh-CHS` / `zh-CHT` 映射回 `zh-CN` / `zh-TW`。即便 basic 缺失，只要有 audio 也能让 UI 渲染 headword + 播放按钮 + 译文。
 
 **网页词典 fallback**：v3 API 没返回 basic 时（`wantDict && !data.basic`），youdao provider 额外 fetch `data.webdict.url`（http→https），用正则切出 `<div id="ec">`（英→中）或 `<div id="ce">`（中→英）那一段，提取音标、释义、词形变化（v3 API 没有，只在网页里）。Service Worker 没 DOMParser，所以用正则；先字符串切块缩小范围（找 `_contentWrp"` 边界）再小范围正则，避免被页面其它 div 干扰。有 basic 的快路径不动，避免每次都多一次 HTTP。`manifest.host_permissions` 必须包含 `m.youdao.com` 和 `mobile.youdao.com`。
 
