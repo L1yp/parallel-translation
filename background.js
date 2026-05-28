@@ -1,29 +1,33 @@
-// background.js —— 后台 Service Worker
-// 内容脚本不直接请求翻译接口，而是把文本发到这里，由后台 fetch，
-// 这样可以避开部分网页的 CORS 限制，也更容易统一处理。
+// background.js —— 后台 Service Worker（ES module）
+// 职责：唯一的翻译 fetch 入口 + 快捷键转发。
+// 内容脚本通过 chrome.runtime.sendMessage({type:"translate"}) 委托翻译，
+// 这样能绕过部分页面 CSP/CORS 限制，并集中处理网络请求。
+
+import { translate, DEFAULT_PROVIDER } from "./providers/index.js";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "translate") {
-    translateText(msg.text, msg.targetLang)
+    translate(msg.provider || DEFAULT_PROVIDER, msg.text, msg.targetLang)
       .then((translated) => sendResponse({ ok: true, translated }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true; // 异步响应，必须返回 true
   }
 });
 
-async function translateText(text, targetLang) {
-  // Google 免费翻译接口（非官方）。client=gtx, sl=auto 自动识别源语言, dt=t 取译文
-  const url =
-    "https://translate.googleapis.com/translate_a/single" +
-    "?client=gtx&sl=auto" +
-    "&tl=" + encodeURIComponent(targetLang) +
-    "&dt=t&q=" + encodeURIComponent(text);
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("HTTP " + res.status);
-
-  // 返回结构：data[0] 是一个数组，每个元素形如 [译文片段, 原文片段, ...]
-  const data = await res.json();
-  if (!Array.isArray(data) || !Array.isArray(data[0])) return "";
-  return data[0].map((seg) => (seg && seg[0]) || "").join("");
-}
+// 快捷键：转发给当前 tab 的 content.js 切换翻译。
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== "toggle-translate") return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !tab.id) return;
+  const prefs = await chrome.storage.sync.get([
+    "targetLang",
+    "style",
+    "observerEnabled",
+    "hoverKey",
+    "provider",
+  ]);
+  chrome.tabs.sendMessage(tab.id, { type: "toggle", ...prefs }, () => {
+    // 内容脚本未注入（例如安装前已打开的页面）—— 静默忽略
+    void chrome.runtime.lastError;
+  });
+});

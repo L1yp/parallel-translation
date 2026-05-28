@@ -1,4 +1,7 @@
-/* content.css —— 译文块样式 */
+/* content.css —— 译文块样式
+ * 基础样式（无 style 类）保留旧版"蓝色 + 顶部虚线"。
+ * 用户在 popup 切换样式预设后，会在 .itl-translation 上额外挂 .itl-style-xxx。
+ */
 .itl-translation {
   display: block;
   margin-top: 4px;
@@ -9,4 +12,37 @@
   border-top: 1px dashed rgba(37, 99, 235, 0.35);
   /* 继承原文字体，让对照更自然 */
   font-family: inherit;
+}
+
+/* 下划线：去顶部分隔线，文字本身加实下划线 */
+.itl-translation.itl-style-underline {
+  border-top: none;
+  padding-top: 2px;
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 99, 235, 0.55);
+  text-underline-offset: 2px;
+}
+
+/* 模糊：默认模糊，悬停清晰 —— 适合"先读原文再确认译文"的场景 */
+.itl-translation.itl-style-blur {
+  filter: blur(3px);
+  transition: filter 0.15s ease;
+}
+.itl-translation.itl-style-blur:hover {
+  filter: none;
+}
+
+/* 加粗 */
+.itl-translation.itl-style-bold {
+  font-weight: 600;
+}
+
+/* 卡片：浅灰背景 + 圆角 + 内边距，强对照感 */
+.itl-translation.itl-style-card {
+  border-top: none;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(37, 99, 235, 0.08);
+  border-left: 3px solid rgba(37, 99, 235, 0.6);
+  border-radius: 4px;
 }

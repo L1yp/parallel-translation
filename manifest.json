@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "沉浸式翻译 Lite",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "双语对照网页翻译：原文在上，译文在下，使用 Google 翻译接口。",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://translate.googleapis.com/*"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup.html",
@@ -19,5 +20,14 @@
       "css": ["content.css"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "commands": {
+    "toggle-translate": {
+      "suggested_key": {
+        "default": "Alt+T",
+        "mac": "Alt+T"
+      },
+      "description": "切换整页翻译"
+    }
+  }
 }

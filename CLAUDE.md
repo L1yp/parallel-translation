@@ -10,10 +10,11 @@
 
 三段式 Chrome 扩展架构，按 MV3 的消息边界分离职责：
 
-- **`manifest.json`** —— MV3 配置。声明权限（`activeTab` / `scripting` / `storage`）、host 权限（仅 `translate.googleapis.com`）、后台 Service Worker、`<all_urls>` 上的内容脚本注入（`document_idle`）。
-- **`background.js`** —— Service Worker。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。
-- **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
-- **`popup.html` / `popup.js`** —— 工具栏弹窗。仅做用户交互：选语言、发 `{type: "toggle"}` 给当前 tab 的内容脚本、持久化语言偏好到 `chrome.storage.sync`。
+- **`manifest.json`** —— MV3 配置。声明权限（`activeTab` / `scripting` / `storage`）、host 权限（仅 `translate.googleapis.com`）、后台 Service Worker（`type: "module"`）、`<all_urls>` 上的内容脚本注入（`document_idle`）、`commands`（`Alt+T` 切换整页翻译）。
+- **`background.js`** —— Service Worker（ES module）。**唯一发起翻译 fetch 的地方**，内容脚本通过 `chrome.runtime.sendMessage({type: "translate"})` 委托过来。这样做的目的：绕过部分页面的 CORS 限制，并集中处理网络请求。响应必须 `return true` 以走异步 `sendResponse`。也监听 `chrome.commands.onCommand`，把快捷键转成 `toggle` 消息发给当前 tab。
+- **`providers/`** —— 翻译服务实现。`providers/google.js` 是当前唯一的 provider，`providers/index.js` 提供 `translate(name, text, targetLang)` 路由。新增源（DeepL、OpenAI 兼容端点等）只需在此目录加文件并注册到 `PROVIDERS`，不动 `background.js` 主流程。
+- **`content.js`** —— 注入到每个页面的核心逻辑。负责 DOM 遍历、可见性过滤、并发调度、译文插入与清理、`MutationObserver` 监听动态内容、悬停翻译。**所有 DOM 操作都集中在这里**，不要把 DOM 逻辑下沉到 background。
+- **`popup.html` / `popup.js`** —— 工具栏弹窗。用户交互：选语言、选译文样式、选悬停修饰键、开关 observer；持久化到 `chrome.storage.sync`，并通过 `{type: "toggle"}` 把当前偏好一并发给 content.js。
 
 ### 关键消息流
 
@@ -37,10 +38,26 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 
 ## 开关 / 还原
 
-`isOn` 是页面级状态。`removeAll()` 通过移除 `.itl-translation` 节点 + 清掉 `data-itl-done` 属性来还原页面，**没有保存原始 DOM 快照**。因此：
+`isOn` 是页面级状态。`turnOff()` 通过移除 `.itl-translation` 节点 + 清掉 `data-itl-done` 属性来还原页面，**没有保存原始 DOM 快照**。因此：
 
 - 不要把译文 **替换** 进原文节点 —— 必须作为新的子节点 append（当前实现已经是这样）。
-- 增加新功能时，任何对原始 DOM 的修改都需要在 `removeAll()` 里有对应的逆操作。
+- 增加新功能时，任何对原始 DOM 的修改都需要在 `turnOff()` 里有对应的逆操作。
+
+## 动态内容（MutationObserver）
+
+`startObserver()` / `stopObserver()` 在 `turnOn()` / `turnOff()` 之间配对调用。要点：
+
+- **300ms 去抖**：Twitter/Reddit 之类高频 mutate 的页面如果不去抖会反复打 Google 接口触发限流。我们自己 append 的 `.itl-translation` 也会触发 mutation，去抖能合并这种回声。
+- **`PROCESSED` 标记 + 立即 setAttribute**：worker 从 queue 取出元素后**先**打标再 await，避免在 await 期间 observer 把同一节点二次入队。
+- **默认开**：用户可在 popup 关闭。`chrome.storage.onChanged` 监听 `observerEnabled` 切换，热更新无需 toggle。
+
+## 悬停翻译
+
+`onMouseMove` 全局监听（capture 阶段），`hoverKey` ∈ `{alt, ctrl, shift, off}`，`off` 时彻底拆掉 listener。命中流程：`elementFromPoint` → `closest(BLOCK_SELECTOR)` → `isLeafBlock` → 复用 `translateRemote`。悬停翻译过的节点也会被打上 `PROCESSED`，因此后续整页翻译不会重复处理。
+
+## 译文样式预设
+
+`content.css` 内置 5 种：`default` / `underline` / `blur` / `bold` / `card`。`style` 字段存 storage，content.js 在插入 `.itl-translation` 时挂 `.itl-style-xxx`。切换样式时 `refreshExistingStyles()` 会更新已插入的节点，无需还原重译。
 
 ## 开发与调试
 
@@ -57,17 +74,21 @@ popup 不直接调 background；content 不直接 fetch 外部接口。每条边
 - **不要把 fetch 移到 content.js**：会被很多站点的 CSP 拦掉，且无法统一处理。
 - **不要使用 `innerHTML` 注入译文**：当前用 `textContent`，保持这种做法，避免在第三方页面里引入 XSS 风险。
 - **Google 免费接口随时可能失效或限流**：失败时 `worker()` 里只是 `console.warn`，不要改成抛错中断整个队列。
-- **没有 MutationObserver**：动态加载的内容（无限滚动、SPA 路由切换）不会被自动翻译。如果要加，需要：(a) 去抖、(b) 复用 `data-itl-done` 标记防重、(c) 在 `removeAll()` 里把 observer 也断开。
 - **MV3 Service Worker 会休眠**：不要在 background.js 里持有跨消息的全局状态，每次 `onMessage` 都要按"冷启动"假设来写。
+- **不要把样式预设的 class 加到原文 `el` 上**：`.itl-style-xxx` 只挂在 `.itl-translation` 子节点上；挂到原文节点会污染原网页样式且 `turnOff()` 不会清。
+- **新增 provider 时不要在 content.js 里加分支**：路由集中在 `providers/index.js`。content.js 只透传 `provider` 字符串。
 
 ## 文件清单
 
 | 文件 | 角色 |
 |------|------|
-| `manifest.json` | MV3 配置 |
-| `background.js` | Service Worker，唯一的 fetch 入口 |
-| `content.js` | DOM 遍历、并发调度、译文插入/清理 |
-| `content.css` | `.itl-translation` 译文块样式 |
+| `manifest.json` | MV3 配置（含 `commands` 快捷键、`type: "module"`） |
+| `background.js` | Service Worker（ES module），翻译 fetch 入口 + 快捷键转发 |
+| `providers/index.js` | provider 路由表 |
+| `providers/google.js` | Google 免费翻译实现 |
+| `content.js` | DOM 遍历、并发调度、译文插入/清理、MutationObserver、悬停翻译 |
+| `content.css` | `.itl-translation` 译文块样式 + 5 种样式预设 |
 | `popup.html` | 弹窗 UI（含内联样式） |
 | `popup.js` | 弹窗交互、`chrome.storage.sync` 持久化 |
 | `README.md` | 面向用户的安装与使用说明 |
+| `docs/roadmap.md` | 开发路线图（功能调研 + P0/P1/P2 优先级） |

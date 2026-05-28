@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <style>
       body {
-        width: 240px;
+        width: 260px;
         margin: 0;
         padding: 16px;
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -26,7 +26,19 @@
         font-size: 13px;
         border: 1px solid #d1d5db;
         border-radius: 6px;
-        margin-bottom: 14px;
+        margin-bottom: 12px;
+        background: #fff;
+      }
+      .row-check {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #374151;
+        margin: 0 0 14px;
+      }
+      .row-check input {
+        margin: 0;
       }
       button {
         width: 100%;
@@ -45,12 +57,21 @@
         font-size: 11px;
         color: #9ca3af;
         margin-top: 10px;
-        line-height: 1.4;
+        line-height: 1.5;
+      }
+      kbd {
+        font-family: ui-monospace, "SF Mono", Consolas, monospace;
+        font-size: 10px;
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 3px;
+        padding: 0 4px;
       }
     </style>
   </head>
   <body>
     <h1>沉浸式翻译 Lite</h1>
+
     <label for="lang">目标语言</label>
     <select id="lang">
       <option value="zh-CN">中文（简体）</option>
@@ -62,8 +83,34 @@
       <option value="de">Deutsch</option>
       <option value="es">Español</option>
     </select>
+
+    <label for="style">译文样式</label>
+    <select id="style">
+      <option value="default">默认（蓝色虚线）</option>
+      <option value="underline">下划线</option>
+      <option value="blur">模糊（悬停显示）</option>
+      <option value="bold">加粗</option>
+      <option value="card">卡片</option>
+    </select>
+
+    <label for="hover">悬停翻译</label>
+    <select id="hover">
+      <option value="off">关闭</option>
+      <option value="alt">按住 Alt + 悬停</option>
+      <option value="ctrl">按住 Ctrl + 悬停</option>
+      <option value="shift">按住 Shift + 悬停</option>
+    </select>
+
+    <label class="row-check">
+      <input type="checkbox" id="observer" />
+      自动翻译动态加载的内容
+    </label>
+
     <button id="go">翻译 / 还原</button>
-    <p class="hint">点击按钮翻译当前页面，再次点击还原。安装后请刷新已打开的页面。</p>
+    <p class="hint">
+      快捷键 <kbd>Alt</kbd>+<kbd>T</kbd> 也能开关整页翻译。<br />
+      安装/更新后请刷新已打开的页面。
+    </p>
     <script src="popup.js"></script>
   </body>
 </html>
