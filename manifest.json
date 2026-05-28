@@ -8,7 +8,9 @@
     "https://translate.googleapis.com/*",
     "https://api.cognitive.microsofttranslator.com/*",
     "https://*.api.cognitive.microsofttranslator.com/*",
-    "https://openapi.youdao.com/*"
+    "https://openapi.youdao.com/*",
+    "https://m.youdao.com/*",
+    "https://mobile.youdao.com/*"
   ],
   "background": {
     "service_worker": "background.js",

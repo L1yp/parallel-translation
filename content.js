@@ -569,6 +569,11 @@
       for (const d of dict.definitions) append("itl-sel-definition", d);
     }
 
+    if (Array.isArray(dict.wordforms) && dict.wordforms.length) {
+      append("itl-sel-section-title", "词形");
+      for (const wf of dict.wordforms) append("itl-sel-wordform", wf);
+    }
+
     if (Array.isArray(dict.webExplains) && dict.webExplains.length) {
       append("itl-sel-section-title", "网络");
       for (const w of dict.webExplains) {

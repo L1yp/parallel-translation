@@ -94,9 +94,101 @@ export async function translate(text, targetLang, config, options) {
 
   const translations = Array.isArray(data.translation) ? data.translation : [];
   const out = { text: translations.join("\n") };
-  const dict = parseYoudaoDict(data);
+  let dict = parseYoudaoDict(data);
+
+  // v3 API 在 isWord=false 时不返 basic（'become' 也会被判 false）。
+  // 这时去 webdict.url 的网页 #ec / #ce 抓一遍，能补全音标、释义、词形变化。
+  // 有 basic 的快路径不动，避免每次都多一次 HTTP。
+  if (wantDict && !data.basic && data.webdict && data.webdict.url) {
+    const fb = await fetchYoudaoWebdict(data.webdict.url);
+    if (fb) {
+      dict = dict || {};
+      if (!dict.phonetics && fb.phonetics) dict.phonetics = fb.phonetics;
+      if (!dict.explains && fb.explains) dict.explains = fb.explains;
+      if (fb.wordforms) dict.wordforms = fb.wordforms;
+    }
+  }
+
   if (dict) out.dict = dict;
   return out;
+}
+
+async function fetchYoudaoWebdict(url) {
+  try {
+    // webdict.url 用 http，host_permissions 里我们要求 https，转一下
+    const httpsUrl = url.replace(/^http:\/\//, "https://");
+    const res = await fetch(httpsUrl);
+    if (!res.ok) return null;
+    return parseEcOrCeBlock(await res.text());
+  } catch (_) {
+    return null;
+  }
+}
+
+// 从有道移动版网页里切出 #ec（英→中）或 #ce（中→英）这一段，正则提字段。
+// SW 没 DOMParser，先按字符串切块缩范围，再小范围正则，避免页面里其它 div 干扰。
+function parseEcOrCeBlock(html) {
+  let i = html.indexOf('<div id="ec"');
+  let mode = "ec";
+  if (i < 0) {
+    i = html.indexOf('<div id="ce"');
+    mode = "ce";
+  }
+  if (i < 0) return null;
+  // 切到下一个 trans-container 容器边界
+  const next = html.indexOf("_contentWrp\"", i + 12);
+  const block = next > i ? html.slice(i, next) : html.slice(i, i + 8000);
+
+  const dict = {};
+  const phonetics = [];
+  if (mode === "ec") {
+    const ph = /(英|美)\s*<span class="phonetic">\[([^\]]+)\]<\/span>/g;
+    let m;
+    while ((m = ph.exec(block)) !== null) phonetics.push({ region: m[1], ipa: m[2].trim() });
+  } else {
+    const m = block.match(/<span class="phonetic">\[([^\]]+)\]<\/span>/);
+    if (m) phonetics.push({ ipa: m[1].trim() });
+  }
+  if (phonetics.length) dict.phonetics = phonetics;
+
+  const explains = [];
+  if (mode === "ec") {
+    const li = /<li>([\s\S]+?)<\/li>/g;
+    let m;
+    while ((m = li.exec(block)) !== null) {
+      const txt = stripTags(m[1]).replace(/\s+/g, " ").trim();
+      if (txt) explains.push(txt);
+    }
+  } else {
+    // 中→英：<a class="clickable">英译</a>; ... 收集成一行
+    const a = /<a class="clickable"[^>]*>([^<]+)<\/a>/g;
+    const items = [];
+    let m;
+    while ((m = a.exec(block)) !== null) {
+      const t = m[1].trim();
+      if (t) items.push(t);
+    }
+    if (items.length) explains.push(items.join("；"));
+  }
+  if (explains.length) dict.explains = explains.slice(0, 6);
+
+  // 词形变化仅 #ec 有
+  if (mode === "ec") {
+    const wf = [];
+    const p = /<p class="grey">\s*([\s\S]+?)\s*<\/p>/g;
+    let m;
+    while ((m = p.exec(block)) !== null) {
+      const txt = stripTags(m[1]).replace(/\s+/g, " ").trim();
+      if (txt) wf.push(txt);
+    }
+    if (wf.length) dict.wordforms = wf;
+  }
+
+  return Object.keys(dict).length ? dict : null;
+}
+
+function stripTags(s) {
+  return s.replace(/<[^>]+>/g, "");
 }
 
 // from=auto 时基本只识别长句；对单字/单词，需要按字符内容自己判断锁 from，

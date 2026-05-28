@@ -192,7 +192,8 @@
   margin: 8px 0 3px;
   letter-spacing: 0.04em;
 }
-.itl-selection-bubble.itl-selection-dict .itl-sel-web {
+.itl-selection-bubble.itl-selection-dict .itl-sel-web,
+.itl-selection-bubble.itl-selection-dict .itl-sel-wordform {
   font-size: 12px;
   line-height: 1.5;
   color: #e5e7eb;
