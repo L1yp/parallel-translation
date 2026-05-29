@@ -1,4 +1,4 @@
-# 沉浸式翻译 Lite
+# 对照式翻译
 
 一个双语对照的 Chrome 翻译插件：原文在上，译文在下。支持 Google（免费）、Microsoft Translator 和有道智云。
 

@@ -1,4 +1,4 @@
-# 沉浸式翻译 Lite — 开发方向路线图（待审核）
+# 对照式翻译 — 开发方向路线图（待审核）
 
 > 调研日期：2026-05-28
 > 范围：参考官方"沉浸式翻译"（immersive-translate）已实现功能 + GitHub 仓库 issue / discussions 中高频 feature request，结合本仓库 Lite 版当前能力，给出可执行的开发方向草案。

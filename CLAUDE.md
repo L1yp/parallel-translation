@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-**沉浸式翻译 Lite** —— 一个 Chrome 扩展（Manifest V3），实现"原文在上、译文在下"的双语对照网页翻译。后端走 `translate.googleapis.com` 的非官方免费接口，仅供个人学习使用。
+**对照式翻译** —— 一个 Chrome 扩展（Manifest V3），实现"原文在上、译文在下"的双语对照网页翻译。后端走 `translate.googleapis.com` 的非官方免费接口，仅供个人学习使用。
 
 ## 架构
 
