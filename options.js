@@ -520,9 +520,17 @@ const vocabState = {
   sortBy: "createdDesc",
   items: [],
   total: 0,
+  // 全库统计（不随筛选变化），由 vocab-stats 维护
+  stats: { count: 0, oldestAt: null, newestAt: null },
   expanded: new Set(),
   editingNote: null, // id 或 null
 };
+
+function fmtDate(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const vocabSearchEl = $("vocab-search");
 const vocabLangEl = $("vocab-lang");
@@ -535,6 +543,21 @@ const vocabImportFile = $("vocab-import-file");
 function setVocabStatus(text, kind) {
   vocabStatusEl.textContent = text || "";
   vocabStatusEl.className = "cache-status" + (kind ? " " + kind : "");
+}
+
+function loadVocabStats() {
+  chrome.runtime.sendMessage({ type: "vocab-stats" }, (resp) => {
+    // stats 是辅助显示，失败不弹错（与 cache 行为一致），保持上次值
+    void chrome.runtime.lastError;
+    if (resp && resp.ok) {
+      vocabState.stats = {
+        count: resp.count || 0,
+        oldestAt: resp.oldestAt || null,
+        newestAt: resp.newestAt || null,
+      };
+      renderVocabSummary();
+    }
+  });
 }
 
 function loadVocab() {
@@ -561,17 +584,31 @@ function loadVocab() {
       }
     }
   );
+  loadVocabStats();
+}
+
+function renderVocabSummary() {
+  const showing = vocabState.items.length;
+  const { count: total, oldestAt } = vocabState.stats;
+  const filtered = !!(vocabState.search || vocabState.targetLang);
+
+  if (!total) {
+    vocabSummaryEl.textContent = "暂无收藏。在划词翻译气泡上点击 ☆ 或按 S 键即可添加。";
+    return;
+  }
+
+  const oldestPart = oldestAt ? `，最早 ${fmtDate(oldestAt)}` : "";
+  if (filtered) {
+    vocabSummaryEl.textContent = `共 ${total} 条${oldestPart}（当前筛选显示 ${showing} 条）`;
+  } else {
+    vocabSummaryEl.textContent = `共 ${total} 条${oldestPart}`;
+  }
 }
 
 function renderVocabList() {
   vocabListEl.innerHTML = "";
+  renderVocabSummary();
   const showing = vocabState.items.length;
-  // summary 同步先更新
-  vocabSummaryEl.textContent = showing
-    ? `显示 ${showing} 条`
-    : (vocabState.search || vocabState.targetLang
-        ? "当前筛选条件下没有匹配项。"
-        : "暂无收藏。在划词翻译气泡上点击 ☆ 或按 S 键即可添加。");
 
   if (!showing) {
     const empty = document.createElement("div");
@@ -941,6 +978,24 @@ $("vocab-import-btn").addEventListener("click", () => {
   vocabImportFile.click();
 });
 
+// 两步 confirm 选择导入模式：先 merge / 取消，取消后再问是否走 replace（破坏性）。
+// 这样 OK = 安全默认（合并），需要破坏性操作的用户得明确再确认一次。
+function pickImportMode(count) {
+  const mergeChoice = confirm(
+    `将导入 ${count} 条生词。\n\n` +
+    `[确定] 合并模式：已存在的（相同词 + 目标语言）跳过，仅追加新增\n` +
+    `[取消] 选择其他模式（覆盖）或放弃导入`
+  );
+  if (mergeChoice) return "merge";
+  const replaceChoice = confirm(
+    `选择「覆盖模式」？\n\n` +
+    `⚠️ 会先清空当前所有生词，再导入文件中的 ${count} 条。\n` +
+    `建议先导出 JSON 备份。\n\n` +
+    `[确定] 覆盖\n[取消] 放弃导入`
+  );
+  return replaceChoice ? "replace" : null;
+}
+
 vocabImportFile.addEventListener("change", () => {
   const f = vocabImportFile.files && vocabImportFile.files[0];
   if (!f) return;
@@ -957,17 +1012,22 @@ vocabImportFile.addEventListener("change", () => {
       return;
     }
     const count = parsed.items.length;
-    if (!confirm(`将导入 ${count} 条生词（已存在的会跳过）。继续吗？`)) return;
-    setVocabStatus("导入中…");
+    const mode = pickImportMode(count);
+    if (!mode) return;
+    setVocabStatus(mode === "replace" ? "覆盖导入中…" : "合并导入中…");
     chrome.runtime.sendMessage(
-      { type: "vocab-import", data: parsed, mode: "merge" },
+      { type: "vocab-import", data: parsed, mode },
       (resp) => {
         if (chrome.runtime.lastError) {
           setVocabStatus("导入失败：" + chrome.runtime.lastError.message, "err");
           return;
         }
         if (resp && resp.ok) {
-          setVocabStatus(`导入完成：新增 ${resp.added} 条，跳过 ${resp.skipped} 条`, "ok");
+          const modeLabel = mode === "replace" ? "覆盖" : "合并";
+          setVocabStatus(
+            `${modeLabel}导入完成：新增 ${resp.added} 条，跳过 ${resp.skipped} 条`,
+            "ok"
+          );
           loadVocab();
         } else {
           setVocabStatus("导入失败：" + ((resp && resp.error) || "未知错误"), "err");
