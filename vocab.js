@@ -248,6 +248,30 @@ export async function vocabUpdateNote(id, note) {
   }
 }
 
+// 上限：避免设置页 textarea 粘贴超大段落把 IDB 字段撑爆；与 content.js 的 CTX_MAX 一致量级。
+const CONTEXT_MAX_LEN = 2000;
+
+export async function vocabUpdateContext(id, context) {
+  try {
+    if (!id) return;
+    const db = await openDb();
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const rec = await reqPromise(store.get(id));
+    if (!rec) {
+      tx.abort();
+      return;
+    }
+    let v = String(context || "");
+    if (v.length > CONTEXT_MAX_LEN) v = v.slice(0, CONTEXT_MAX_LEN);
+    rec.context = v;
+    store.put(rec);
+    await txPromise(tx);
+  } catch (e) {
+    console.warn("[ITL vocab] updateContext failed:", e);
+  }
+}
+
 export async function vocabClearAll() {
   try {
     const db = await openDb();

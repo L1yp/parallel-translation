@@ -88,6 +88,7 @@ interface VocabItem {
 | `vocab-check` | `normalized, targetLang` | `{ok, exists, id?}` |
 | `vocab-list` | `filter?` | `{ok, items, total}` |
 | `vocab-update-note` | `id, note` | `{ok}` |
+| `vocab-update-context` | `id, context` | `{ok}` |
 | `vocab-clear-all` | — | `{ok, cleared}` |
 | `vocab-export` | — | `{ok, data: ExportFile}` |
 | `vocab-import` | `data, mode` | `{ok, added, skipped}` |
@@ -149,6 +150,7 @@ export async function vocabCheck(normalized, targetLang) -> {exists, id?}
 export async function vocabGet(id) -> VocabItem | null
 export async function vocabList(filter) -> {items, total}
 export async function vocabUpdateNote(id, note) -> void
+export async function vocabUpdateContext(id, context) -> void   // 上限 2000 字符，超出截断
 export async function vocabClearAll() -> number
 export async function vocabExportAll() -> ExportFile
 export async function vocabImport(data, mode) -> {added, skipped}
@@ -193,15 +195,16 @@ export function normalizeWord(word) -> string  // 工具函数，与 background 
 | `dict` | provider 返回的 dict 字段 |
 | `sourceUrl` | `location.href` |
 | `sourceTitle` | `document.title` |
-| `context` | 选区前后各 ~80 字符（见 6.5） |
+| `context` | 选区所在整句（见 6.5），用户可在设置页改写 |
 
 ### 6.5 上下文提取
 
 ```js
-function extractContext(range) {
-  // 取选区所在 block 的 textContent；
-  // 选区在 block 中的偏移前后各取 ~80 字符，跨节点拼接，用 "…" 截断
-  // 失败回退 ""
+function extractSelectionContext(text) {
+  // 1. 找选区所在 BLOCK_SELECTOR 的 textContent
+  // 2. 以选区位置为锚点，向左 / 右扩到最近的句末标点（.!?。！？；; 或换行），把整句切出来
+  // 3. 句子超 CTX_MAX (= 800) 字符时退化为选区前后等额窗口（防止长段落 / 代码块吞掉整块）
+  // 4. 用户可在设置页里事后改写
 }
 ```
 
@@ -209,6 +212,7 @@ function extractContext(range) {
 
 - 用 `range.startContainer` 找最近的 `BLOCK_SELECTOR`
 - 用 `Range.toString()` + `parent.textContent` 的 `indexOf` 定位选区在父块中的偏移（启发式，对嵌入 `<strong>` / `<a>` 等行内标签足够）
+- 句子边界识别只看字符，不做 NLP；遇到缩写（"Mr. Smith"）等少数 corner case 会切偏 —— 接受这个代价，用户可在设置页改写补全
 - 极端失败（Shadow Root / 复杂富文本）回退空字符串
 
 ### 6.6 不变量
@@ -246,6 +250,7 @@ ubiquitous           无处不在的     nytimes.com     05-12 14:32  [详情] [
 
 - 点击行展开详情卡片（音标、词性释义、例句）
 - 点击「备注」打开 inline `<input>`，blur 时保存
+- **点击 context 块**进入 textarea 编辑（Ctrl/⌘+Enter 或失焦保存，Esc 取消），走 `vocab-update-context` —— 用来修正自动截句偏差或补全空 context
 - 「删除」二次确认
 
 ### 7.4 导入 / 导出格式

@@ -524,6 +524,7 @@ const vocabState = {
   stats: { count: 0, oldestAt: null, newestAt: null },
   expanded: new Set(),
   editingNote: null, // id 或 null
+  editingContext: null, // id 或 null
 };
 
 function fmtDate(ts) {
@@ -708,12 +709,9 @@ function renderVocabItem(item) {
   }
   wrap.appendChild(meta);
 
-  if (item.context) {
-    const ctx = document.createElement("div");
-    ctx.className = "vocab-context";
-    ctx.textContent = item.context;
-    wrap.appendChild(ctx);
-  }
+  // 上下文：点击进入编辑（textarea）。Ctrl/⌘+Enter 或 blur 保存，Esc 取消。
+  // 即便 context 为空，也渲染一个 placeholder，引导用户补全（划词时的整句很有用，但不一定完整）
+  wrap.appendChild(renderVocabContext(item));
 
   const noteRow = document.createElement("div");
   noteRow.className = "vocab-note-row";
@@ -767,6 +765,71 @@ function saveVocabNote(id, note) {
       // 本地直接改一下避免再发一次 list
       const it = vocabState.items.find((x) => x.id === id);
       if (it) it.note = String(note || "");
+      renderVocabList();
+    }
+  );
+}
+
+function renderVocabContext(item) {
+  const wrap = document.createElement("div");
+  wrap.className = "vocab-context";
+  if (vocabState.editingContext === item.id) {
+    const ta = document.createElement("textarea");
+    ta.className = "vocab-context-input";
+    ta.value = item.context || "";
+    ta.placeholder = "句子上下文…（Ctrl/⌘+Enter 或失焦保存，Esc 取消）";
+    let cancelled = false;
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        saveVocabContext(item.id, ta.value);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelled = true;
+        vocabState.editingContext = null;
+        renderVocabList();
+      }
+    });
+    ta.addEventListener("blur", () => {
+      if (cancelled) return;
+      if (vocabState.editingContext === item.id) saveVocabContext(item.id, ta.value);
+    });
+    wrap.appendChild(ta);
+    const hint = document.createElement("div");
+    hint.className = "vocab-context-hint";
+    hint.textContent = "Ctrl/⌘+Enter 或点击别处保存，Esc 放弃改动";
+    wrap.appendChild(hint);
+    // 自动 focus；定位到末尾，便于直接续写
+    setTimeout(() => {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }, 0);
+  } else {
+    wrap.classList.add("editable");
+    wrap.title = "点击编辑上下文";
+    if (item.context) {
+      wrap.textContent = item.context;
+    } else {
+      wrap.classList.add("placeholder");
+      wrap.textContent = "（无上下文，点击添加）";
+    }
+    wrap.addEventListener("click", () => {
+      vocabState.editingContext = item.id;
+      renderVocabList();
+    });
+  }
+  return wrap;
+}
+
+function saveVocabContext(id, context) {
+  const next = String(context || "");
+  vocabState.editingContext = null;
+  chrome.runtime.sendMessage(
+    { type: "vocab-update-context", id, context: next },
+    () => {
+      void chrome.runtime.lastError;
+      const it = vocabState.items.find((x) => x.id === id);
+      if (it) it.context = next;
       renderVocabList();
     }
   );

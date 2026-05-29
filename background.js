@@ -21,6 +21,7 @@ import {
   vocabCheck,
   vocabList,
   vocabUpdateNote,
+  vocabUpdateContext,
   vocabClearAll,
   vocabExportAll,
   vocabImport,
@@ -93,6 +94,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === "vocab-update-note") {
     vocabUpdateNote(msg.id, msg.note || "")
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (msg.type === "vocab-update-context") {
+    vocabUpdateContext(msg.id, msg.context || "")
       .then(() => sendResponse({ ok: true }))
       .catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
     return true;

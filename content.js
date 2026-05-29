@@ -494,8 +494,13 @@
     return true;
   }
 
-  // 选区上下文：取选区所在块的 textContent，前后各取 ~80 字符。
+  // 选区上下文：取选区所在块 textContent，向两侧扩到最近的句末标点（含中英）/ 换行，截出整句。
+  // 兜底：句子过长（> CTX_MAX 字符，如代码块 / 无标点长段落）退化为选区前后等额窗口。
   // 跨节点 / Shadow Root / 富文本失败时回退空字符串，不让收藏功能崩。
+  // 用户可在设置页生词本面板里事后改写。
+  const SENT_END_RE = /[.!?。！？；;]/;
+  const CTX_MAX = 800;
+
   function extractSelectionContext(text) {
     try {
       const sel = window.getSelection();
@@ -508,9 +513,34 @@
       const full = (block && block.textContent) || "";
       const idx = full.indexOf(text);
       if (idx < 0) return "";
-      const WIN = 80;
-      const left = Math.max(0, idx - WIN);
-      const right = Math.min(full.length, idx + text.length + WIN);
+      const selEnd = idx + text.length;
+
+      // 向左找句首：扫选区前一个字符往回走，遇到句末标点 / 换行就停
+      let left = idx;
+      while (left > 0) {
+        const ch = full[left - 1];
+        if (ch === "\n" || SENT_END_RE.test(ch)) break;
+        left--;
+      }
+      // 跳过句首前的空白（例如 "...end. <space>Word"）
+      while (left < idx && /\s/.test(full[left])) left++;
+
+      // 向右找句末：扫选区末，找到句末标点就停（含标点本身）
+      let right = selEnd;
+      while (right < full.length) {
+        const ch = full[right];
+        if (ch === "\n") break;
+        right++;
+        if (SENT_END_RE.test(ch)) break;
+      }
+
+      // 长度兜底：长段落 / 代码块没有标点时不要吞掉整块
+      if (right - left > CTX_MAX) {
+        const halfBudget = Math.max(40, Math.floor((CTX_MAX - text.length) / 2));
+        left = Math.max(0, idx - halfBudget);
+        right = Math.min(full.length, selEnd + halfBudget);
+      }
+
       let snip = full.slice(left, right).replace(/\s+/g, " ").trim();
       if (left > 0) snip = "…" + snip;
       if (right < full.length) snip = snip + "…";
