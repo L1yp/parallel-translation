@@ -200,3 +200,4 @@ content.js 的应用层：
 | `README.md` | 面向用户的安装与使用说明 |
 | `docs/roadmap.md` | 开发路线图（功能调研 + P0/P1/P2 优先级） |
 | `docs/vocabulary.md` | 生词本详细设计文档（数据模型、消息协议、并行任务划分） |
+| `docs/sync-backend.md` | 配置同步后端 API 设计文档（账号 / 偏好 / 站点规则 / 凭证 / 生词本 的跨设备同步，未实现） |
