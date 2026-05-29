@@ -7,11 +7,13 @@
 import { translate as googleTranslate } from "./google.js";
 import { translate as microsoftTranslate } from "./microsoft.js";
 import { translate as youdaoTranslate } from "./youdao.js";
+import { translate as tencentTranslate } from "./tencent.js";
 
 const PROVIDERS = {
   google: googleTranslate,
   microsoft: microsoftTranslate,
   youdao: youdaoTranslate,
+  tencent: tencentTranslate,
 };
 
 export const DEFAULT_PROVIDER = "google";
