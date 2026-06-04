@@ -694,6 +694,16 @@
     bubble.style.top = Math.round(top) + "px";
   }
 
+  // 选区是否已经是目标语言：同语种翻译没意义，不必弹气泡。
+  // 目前只处理中文目标——目标为 zh 时，若选区里汉字占全部字母的多数则跳过。
+  function isSelectionSameAsTarget(text) {
+    if (!/^zh/i.test(targetLang)) return false;
+    const letters = (text.match(/\p{L}/gu) || []).length;
+    if (letters === 0) return false;
+    const han = (text.match(/\p{Script=Han}/gu) || []).length;
+    return han / letters >= 0.5;
+  }
+
   // 单词判定：无空格、长度 ≤ 30、至少含一个字母（含 CJK）。命中后请求 wantDict。
   function isSingleWord(text) {
     if (!text || text.length > 30) return false;
@@ -907,6 +917,8 @@
     setTimeout(() => {
       const info = readSelection(e);
       if (!info || info.text.length < 2) return;
+      // 选区已是目标语言（如目标中文、选的也是中文）就别弹气泡
+      if (isSelectionSameAsTarget(info.text)) return;
       showSelectionBubble(info, e);
     }, 0);
   }
